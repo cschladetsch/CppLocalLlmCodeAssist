@@ -66,4 +66,23 @@ bool OllamaClient::IsModelAvailable() const {
     return false;
 }
 
+std::vector<std::string> OllamaClient::ListModels() const {
+    httplib::Client cli(config_.host, config_.port);
+    cli.set_connection_timeout(5, 0);
+    auto res = cli.Get("/api/tags");
+    std::vector<std::string> names;
+    if (!res || res->status != 200) {
+        return names;
+    }
+    try {
+        json parsed = json::parse(res->body);
+        for (const auto& m : parsed.value("models", json::array())) {
+            names.push_back(m.value("name", std::string{}));
+        }
+    } catch (const json::exception& e) {
+        spdlog::error("OllamaClient: failed to parse /api/tags response: {}", e.what());
+    }
+    return names;
+}
+
 }  // namespace cppcoder

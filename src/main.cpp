@@ -1,3 +1,4 @@
+#include "cppcoder/ChatServer.h"
 #include "cppcoder/CodebaseScanner.h"
 #include "cppcoder/Logging.h"
 #include "cppcoder/OllamaClient.h"
@@ -8,6 +9,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -17,19 +19,56 @@ namespace {
 void PrintUsage(const char* argv0) {
     std::cerr
         << "Usage: " << argv0 << " --question \"...\" --codebase <path> [options]\n"
+        << "   or: " << argv0 << " --serve [options]\n"
         << "\n"
-        << "Options:\n"
-        << "  --question <text>        Question to research (required)\n"
-        << "  --codebase <path>        Root of the codebase to investigate (required)\n"
-        << "  --model <name>           Ollama model tag (default: qwen2.5-coder:7b)\n"
-        << "  --host <host>            Ollama host (default: localhost)\n"
-        << "  --port <port>            Ollama port (default: 11434)\n"
+        << "Research mode options:\n"
+        << "  --question <text>        Question to research (required unless --serve)\n"
+        << "  --codebase <path>        Root of the codebase to investigate (required unless --serve)\n"
         << "  --max-minutes <n>        Wall clock budget in minutes (default: 90)\n"
         << "  --max-iterations <n>     Max task loop iterations (default: 200)\n"
         << "  --token-budget <n>       Approx tokens per task (default: 120000)\n"
         << "  --events-file <path>     Write JSON-lines engine events for the web UI\n"
+        << "\n"
+        << "Chat server mode options:\n"
+        << "  --serve                  Start the web chat UI + API instead of researching\n"
+        << "  --serve-host <addr>      Address to bind the chat server to (default: 127.0.0.1)\n"
+        << "  --serve-port <port>      Port to bind the chat server to (default: 8765)\n"
+        << "  --web-root <path>        Directory to serve as the chat UI (default: auto-detect ./web)\n"
+        << "\n"
+        << "Shared Ollama options:\n"
+        << "  --model <name>           Ollama model tag (default: qwen2.5-coder:7b)\n"
+        << "  --host <host>            Ollama host (default: localhost)\n"
+        << "  --port <port>            Ollama port (default: 11434)\n"
+        << "\n"
+        << "Logging options:\n"
         << "  --log-level <level>      trace|debug|info|warn|err|critical|off (default: info)\n"
         << "  --log-file <path>        Also write logs to this file\n";
+}
+
+// Best-effort discovery of the web/ directory (containing chat.html) so
+// `--serve` works out of the box whether run from the repo root or via
+// the built binary in build/src/. Falls back to an empty string (static
+// UI won't be served, but the JSON API still works) if nothing is found.
+std::string ResolveDefaultWebRoot(const char* argv0) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+
+    fs::path cwdCandidate = fs::absolute(fs::path("web"), ec);
+    if (!ec && fs::exists(cwdCandidate / "chat.html")) {
+        return cwdCandidate.string();
+    }
+
+    fs::path exePath = fs::absolute(fs::path(argv0), ec);
+    if (!ec) {
+        // Typical build layout: <repo>/build/src/cppcoder(.exe) -> <repo>/web
+        fs::path candidate = exePath.parent_path() / ".." / ".." / "web";
+        candidate = fs::weakly_canonical(candidate, ec);
+        if (!ec && fs::exists(candidate / "chat.html")) {
+            return candidate.string();
+        }
+    }
+
+    return {};
 }
 
 }  // namespace
@@ -42,6 +81,11 @@ int main(int argc, char** argv) {
     std::string logFilePath;
     cppcoder::OllamaConfig ollamaConfig;
     cppcoder::EngineConfig engineConfig;
+
+    bool serveMode = false;
+    std::string serveHost = "127.0.0.1";
+    int servePort = 8765;
+    std::string webRoot;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -71,6 +115,14 @@ int main(int argc, char** argv) {
             engineConfig.tokenBudgetPerTask = std::stoull(next("--token-budget"));
         } else if (arg == "--events-file") {
             eventsFilePath = next("--events-file");
+        } else if (arg == "--serve") {
+            serveMode = true;
+        } else if (arg == "--serve-host") {
+            serveHost = next("--serve-host");
+        } else if (arg == "--serve-port") {
+            servePort = std::stoi(next("--serve-port"));
+        } else if (arg == "--web-root") {
+            webRoot = next("--web-root");
         } else if (arg == "--log-level") {
             logLevel = next("--log-level");
         } else if (arg == "--log-file") {
@@ -86,6 +138,25 @@ int main(int argc, char** argv) {
     }
 
     cppcoder::InitLogging(logLevel, logFilePath);
+
+    if (serveMode) {
+        cppcoder::ChatServerConfig serverConfig;
+        serverConfig.bindHost = serveHost;
+        serverConfig.bindPort = servePort;
+        serverConfig.ollamaHost = ollamaConfig.host;
+        serverConfig.ollamaPort = ollamaConfig.port;
+        serverConfig.defaultModel = ollamaConfig.model;
+        serverConfig.webRoot = webRoot.empty() ? ResolveDefaultWebRoot(argv[0]) : webRoot;
+
+        if (serverConfig.webRoot.empty()) {
+            spdlog::warn(
+                "Could not locate a web/ directory with chat.html; static UI won't be served "
+                "(pass --web-root explicitly). The /api/* endpoints still work.");
+        }
+
+        cppcoder::ChatServer server(std::move(serverConfig));
+        return server.Run();
+    }
 
     if (question.empty() || codebasePath.empty()) {
         PrintUsage(argv[0]);

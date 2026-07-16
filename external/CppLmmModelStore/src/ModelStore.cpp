@@ -1,14 +1,28 @@
 #include "ModelStore.hpp"
 
+#include <spdlog/spdlog.h>
+
 #include <cstdlib>
 #include <filesystem>
 
 namespace deepseek {
 namespace {
 
+// MSVC's CRT flags std::getenv as "insecure" (wants _dupenv_s) under
+// -Wdeprecated-declarations, including on clang-cl since it compiles
+// against the same headers. _dupenv_s is Windows-only, and this file is
+// shared across POSIX and Windows builds, so we keep plain std::getenv
+// (read-only env lookups are fine) and just silence the warning here
+// rather than fork the implementation per platform.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+
 std::string ResolveModelHomeInternal() {
   if (const char* override_dir = std::getenv("DEEPSEEK_MODEL_HOME"); override_dir &&
       std::string(override_dir).size() > 0) {
+    spdlog::debug("ModelStore: using DEEPSEEK_MODEL_HOME override: {}", override_dir);
     return override_dir;
   }
   const char* xdg_data_home = std::getenv("XDG_DATA_HOME");
@@ -16,8 +30,14 @@ std::string ResolveModelHomeInternal() {
   std::string base = (xdg_data_home && std::string(xdg_data_home).size() > 0)
                          ? xdg_data_home
                          : (home ? std::string(home) + "/.local/share" : ".");
-  return base + "/deepseek/models";
+  std::string resolved = base + "/deepseek/models";
+  spdlog::debug("ModelStore: resolved model home to {}", resolved);
+  return resolved;
 }
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 // Windows forbids '<', '>', ':', '"', '|', '?', '*', and '\' inside a path
 // component -- ':' is the one that actually bites in practice, since NTFS
@@ -48,6 +68,10 @@ std::string SanitizePathComponent(std::string_view component) {
         sanitized.push_back(c);
     }
   }
+  if (sanitized != component) {
+    spdlog::debug("ModelStore: sanitized model name '{}' -> '{}' for filesystem compatibility",
+                  component, sanitized);
+  }
   return sanitized;
 }
 
@@ -69,18 +93,24 @@ std::optional<std::string> ModelStore::EnsureModelDir(std::string_view model_nam
   std::error_code ec;
   std::filesystem::create_directories(path, ec);
   if (ec) {
+    std::string message = "Failed to create model dir: " + path + " (" + ec.message() + ")";
+    spdlog::error("ModelStore: {}", message);
     if (error_out) {
-      *error_out = "Failed to create model dir: " + path + " (" + ec.message() + ")";
+      *error_out = std::move(message);
     }
     return std::nullopt;
   }
+  spdlog::debug("ModelStore: ensured model dir {}", path);
   return path;
 }
 
 bool ModelStore::ModelExists(std::string_view model_name) {
   std::string path = ResolveModelPath(model_name);
   std::error_code ec;
-  return std::filesystem::exists(path, ec);
+  bool exists = std::filesystem::exists(path, ec);
+  spdlog::debug("ModelStore: model '{}' {} at {}", model_name, exists ? "found" : "not found",
+                path);
+  return exists;
 }
 
 }  // namespace deepseek

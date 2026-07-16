@@ -1,7 +1,6 @@
-set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
-add_subdirectory(${CMAKE_SOURCE_DIR}/external/googletest ${CMAKE_BINARY_DIR}/googletest)
+# googletest itself is added once at the top level (before
+# external/CppLmmModelStore, so both test suites share one GTest target)
+# -- see the top-level CMakeLists.txt for details.
 
 add_executable(cppcoder_tests
     TypesTests.cpp

@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace cppcoder {
 
@@ -28,6 +29,10 @@ public:
     // Returns true if Ollama is reachable and reports the configured
     // model as available (via /api/tags).
     bool IsModelAvailable() const;
+
+    // Returns the tags of every model Ollama currently has pulled locally
+    // (via /api/tags). Returns an empty vector if Ollama is unreachable.
+    std::vector<std::string> ListModels() const;
 
     const OllamaConfig& config() const { return config_; }
 

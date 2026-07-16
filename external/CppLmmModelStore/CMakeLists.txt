@@ -23,6 +23,43 @@ if (NOT nlohmann_json_FOUND)
   endif()
 endif()
 
+# spdlog backs all logging in this library (model-home resolution, path
+# sanitization, directory creation, stream-parse errors). If a parent
+# project already provides a spdlog::spdlog target -- e.g. CppCoder's own
+# add_subdirectory(external/spdlog) run before this submodule is added --
+# reuse it rather than vendoring a second copy. Otherwise fall back to a
+# system install, a vendored checkout at ../spdlog or
+# ../third_party/spdlog, or FetchContent.
+if (NOT TARGET spdlog::spdlog)
+  find_package(spdlog CONFIG QUIET)
+  if (NOT spdlog_FOUND)
+    set(SPDLOG_SOURCE_DIR "")
+    foreach(candidate ${CMAKE_CURRENT_SOURCE_DIR}/../spdlog ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/spdlog)
+      if (EXISTS ${candidate}/CMakeLists.txt)
+        set(SPDLOG_SOURCE_DIR ${candidate})
+        break()
+      endif()
+    endforeach()
+
+    if (SPDLOG_SOURCE_DIR)
+      set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+      set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+      set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
+      add_subdirectory(${SPDLOG_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/spdlog)
+    elseif (MODELSTORE_ALLOW_FETCHCONTENT)
+      include(FetchContent)
+      FetchContent_Declare(
+        spdlog
+        URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.tar.gz
+      )
+      FetchContent_MakeAvailable(spdlog)
+    else()
+      message(FATAL_ERROR "spdlog not found. Install it, vendor it at ../spdlog or "
+                           "../third_party/spdlog, or enable MODELSTORE_ALLOW_FETCHCONTENT.")
+    endif()
+  endif()
+endif()
+
 add_library(ModelStore
   src/ModelStore.cpp
   src/DeepSeekStreamParser.cpp
@@ -36,30 +73,41 @@ target_include_directories(ModelStore PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(ModelStore PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(ModelStore PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog)
 target_compile_features(ModelStore PUBLIC cxx_std_20)
 
 option(MODELSTORE_BUILD_TESTS "Build ModelStore tests" ON)
 if (MODELSTORE_BUILD_TESTS)
   set(MODELSTORE_TESTS_ENABLED ON)
-  set(GTEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/googletest)
-  if (EXISTS ${GTEST_SOURCE_DIR}/CMakeLists.txt)
-    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    add_subdirectory(${GTEST_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/third_party/googletest)
-  else()
-    if (NOT MODELSTORE_ALLOW_FETCHCONTENT)
-      message(WARNING "ModelStore tests disabled: missing vendored googletest and MODELSTORE_ALLOW_FETCHCONTENT=OFF.")
-      set(MODELSTORE_TESTS_ENABLED OFF)
-    else()
-      include(FetchContent)
-      FetchContent_Declare(
-        googletest
-        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
-      )
+  if (NOT TARGET GTest::gtest_main)
+    set(GTEST_SOURCE_DIR "")
+    foreach(candidate ${CMAKE_CURRENT_SOURCE_DIR}/../googletest ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/googletest)
+      if (EXISTS ${candidate}/CMakeLists.txt)
+        set(GTEST_SOURCE_DIR ${candidate})
+        break()
+      endif()
+    endforeach()
+
+    if (GTEST_SOURCE_DIR)
+      set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+      set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
       set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-      FetchContent_MakeAvailable(googletest)
+      add_subdirectory(${GTEST_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/googletest)
+    else()
+      if (NOT MODELSTORE_ALLOW_FETCHCONTENT)
+        message(WARNING "ModelStore tests disabled: missing vendored googletest (looked in "
+                         "../googletest and ../third_party/googletest) and "
+                         "MODELSTORE_ALLOW_FETCHCONTENT=OFF.")
+        set(MODELSTORE_TESTS_ENABLED OFF)
+      else()
+        include(FetchContent)
+        FetchContent_Declare(
+          googletest
+          URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+        )
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(googletest)
+      endif()
     endif()
   endif()
 

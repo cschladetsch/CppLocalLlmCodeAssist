@@ -1,6 +1,7 @@
 #include "DeepSeekStreamParser.hpp"
 
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
 #include <string>
 
@@ -57,8 +58,10 @@ bool DeepSeekStreamParser::Feed(std::string_view chunk, std::string* error_out) 
     try {
       j = nlohmann::json::parse(payload);
     } catch (const std::exception& ex) {
+      std::string message = std::string("Invalid JSON in stream: ") + ex.what();
+      spdlog::warn("DeepSeekStreamParser: {}", message);
       if (error_out) {
-        *error_out = std::string("Invalid JSON in stream: ") + ex.what();
+        *error_out = std::move(message);
       }
       return false;
     }
@@ -66,6 +69,8 @@ bool DeepSeekStreamParser::Feed(std::string_view chunk, std::string* error_out) 
     std::string reasoning_delta;
     std::string content_delta;
     if (ExtractDelta(j, &reasoning_delta, &content_delta)) {
+      spdlog::trace("DeepSeekStreamParser: delta reasoning={} bytes, content={} bytes",
+                    reasoning_delta.size(), content_delta.size());
       on_delta_(reasoning_delta, content_delta);
     }
   }
