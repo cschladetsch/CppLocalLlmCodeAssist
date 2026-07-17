@@ -1,4 +1,4 @@
-# CppCoder
+# CppLocalLlmCodeAssist
 
 A C++23 toolkit for working with a small local LLM (via [Ollama](https://ollama.com))
 against a large codebase, in two modes:
