@@ -434,6 +434,7 @@
   /** @type {{role: string, content: string}[]} */
   let history = [];
   let sending = false;
+  let currentAbort = null;
 
   function loadHistory() {
     try {
@@ -611,6 +612,10 @@
     }
   });
 
+  function stopCurrentRequest() {
+    if (currentAbort) currentAbort.abort();
+  }
+
   modelSelect.addEventListener("change", function () {
     localStorage.setItem(MODEL_KEY, modelSelect.value);
   });
@@ -636,7 +641,10 @@
   btnSend.addEventListener("click", send);
 
   async function send() {
-    if (sending) return;
+    if (sending) {
+      stopCurrentRequest();
+      return;
+    }
     const text = input.value.trim();
     if (!text) return;
     const model = modelSelect.value;
@@ -648,7 +656,9 @@
     input.value = "";
     input.style.height = "auto";
     sending = true;
-    btnSend.disabled = true;
+    btnSend.disabled = false;
+    btnSend.textContent = "Stop";
+    setStatus("", "Waiting for Ollama…");
 
     history.push({ role: "user", content: text });
     saveHistory();
@@ -660,19 +670,52 @@
     scrollToBottom();
 
     let assistantContent = "";
+    let timeoutId = null;
+    let timedOut = false;
     try {
+      currentAbort = new AbortController();
+      timeoutId = setTimeout(function () {
+        timedOut = true;
+        if (currentAbort) currentAbort.abort();
+      }, 600000);
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: model, messages: history }),
+        signal: currentAbort.signal,
       });
 
+      if (!res.ok) throw new Error("HTTP " + res.status);
       if (!res.body) throw new Error("Streaming not supported by this browser");
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let sawError = false;
+
+      function handleLine(line) {
+        line = line.trim();
+        if (!line) return;
+
+        let obj;
+        try { obj = JSON.parse(line); } catch (e) { return; }
+
+        if (obj.error) {
+          sawError = true;
+          assistantContent = obj.error;
+          bubble.classList.add("error");
+          bubble.classList.remove("cursor-blink");
+          bubble.innerHTML = renderContent(assistantContent);
+          return;
+        }
+        if (obj.message && typeof obj.message.content === "string") {
+          assistantContent += obj.message.content;
+          bubble.innerHTML = renderContent(assistantContent) + "<span class=\"cursor-blink\"></span>";
+          setStatus("", "Streaming…");
+          scrollToBottom();
+        }
+      }
 
       while (true) {
         const { done, value } = await reader.read();
@@ -681,27 +724,17 @@
 
         let newlineIdx;
         while ((newlineIdx = buffer.indexOf("\n")) >= 0) {
-          const line = buffer.slice(0, newlineIdx).trim();
+          const line = buffer.slice(0, newlineIdx);
           buffer = buffer.slice(newlineIdx + 1);
-          if (!line) continue;
-
-          let obj;
-          try { obj = JSON.parse(line); } catch (e) { continue; }
-
-          if (obj.error) {
-            sawError = true;
-            assistantContent = obj.error;
-            bubble.classList.add("error");
-            bubble.classList.remove("cursor-blink");
-            bubble.innerHTML = renderContent(assistantContent);
-            continue;
-          }
-          if (obj.message && typeof obj.message.content === "string") {
-            assistantContent += obj.message.content;
-            bubble.innerHTML = renderContent(assistantContent) + "<span class=\"cursor-blink\"></span>";
-            scrollToBottom();
-          }
+          handleLine(line);
         }
+      }
+      clearTimeout(timeoutId);
+      buffer += decoder.decode();
+      handleLine(buffer);
+
+      if (!assistantContent && !sawError) {
+        throw new Error("Ollama closed the stream without returning content");
       }
 
       bubble.classList.remove("cursor-blink");
@@ -717,11 +750,18 @@
     } catch (e) {
       bubble.classList.add("error");
       bubble.classList.remove("cursor-blink");
-      bubble.innerHTML = renderContent("Request failed: " + e.message);
-      setStatus("err", "Request failed");
+      const message = e.name === "AbortError"
+        ? (timedOut ? "Request timed out after 10 minutes without completing" : "Request stopped")
+        : "Request failed: " + e.message;
+      bubble.innerHTML = renderContent(message);
+      setStatus(e.name === "AbortError" && !timedOut ? "ok" : "err",
+        e.name === "AbortError" && !timedOut ? "Ready" : "Request failed");
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      currentAbort = null;
       sending = false;
       btnSend.disabled = false;
+      btnSend.textContent = "Send";
       input.focus();
     }
   }

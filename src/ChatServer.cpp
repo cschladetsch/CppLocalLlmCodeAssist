@@ -8,6 +8,16 @@
 
 #include <string>
 
+namespace {
+
+bool WriteNdjsonError(httplib::DataSink& sink, const std::string& message) {
+    nlohmann::json err{{"error", message}};
+    std::string line = err.dump() + "\n";
+    return sink.write(line.data(), line.size());
+}
+
+}  // namespace
+
 namespace cppcoder {
 
 using json = nlohmann::json;
@@ -158,7 +168,7 @@ int ChatServer::Run() {
                 }
 
                 httplib::Client ollama(config_.ollamaHost, config_.ollamaPort);
-                ollama.set_read_timeout(600, 0);
+                ollama.set_read_timeout(60, 0);
                 ollama.set_write_timeout(600, 0);
                 ollama.set_connection_timeout(10, 0);
 
@@ -167,17 +177,28 @@ int ChatServer::Run() {
                 chatReq.path = "/api/chat";
                 chatReq.set_header("Content-Type", "application/json");
                 chatReq.body = out.dump();
+                bool forwardedError = false;
+                chatReq.response_handler = [&sink, &forwardedError](const httplib::Response& r) {
+                    if (r.status >= 200 && r.status < 300) {
+                        return true;
+                    }
+
+                    WriteNdjsonError(sink, "Ollama returned HTTP " + std::to_string(r.status));
+                    forwardedError = true;
+                    return false;
+                };
                 chatReq.content_receiver = [&sink](const char* data, size_t len, uint64_t,
                                                     uint64_t) -> bool {
                     return sink.write(data, len);
                 };
 
                 auto chatRes = ollama.send(chatReq);
-                if (!chatRes) {
-                    json err{{"error", "Ollama request failed: " +
-                                            httplib::to_string(chatRes.error())}};
-                    std::string line = err.dump() + "\n";
-                    sink.write(line.data(), line.size());
+                if (!chatRes && !forwardedError) {
+                    std::string message = chatRes.error() == httplib::Error::Read
+                                              ? "Ollama did not send chat data for 60 seconds"
+                                              : "Ollama request failed: " +
+                                                    httplib::to_string(chatRes.error());
+                    WriteNdjsonError(sink, message);
                     spdlog::error("ChatServer: /api/chat proxy failed: {}",
                                   httplib::to_string(chatRes.error()));
                 }
