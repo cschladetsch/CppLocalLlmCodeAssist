@@ -133,6 +133,7 @@
     border-radius: 7px;
     padding: 7px 10px;
     min-width: 220px;
+    max-width: 340px;
   }
   select:focus-visible { outline: 2px solid var(--blue-bright); outline-offset: 1px; }
 
@@ -360,6 +361,37 @@
 
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ---------- Pull banner ---------- */
+
+  .pull-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid rgba(59,130,246,0.35);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font-size: 13px;
+  }
+  .pull-banner .pull-text { flex: 1; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .pull-banner .pull-progress-track {
+    flex: 1;
+    height: 6px;
+    background: var(--panel-2);
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+  }
+  .pull-banner .pull-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--blue);
+    transition: width 0.2s ease;
+  }
+  .pull-banner.err { border-color: rgba(239,68,68,0.4); }
+  .pull-banner.ok { border-color: rgba(34,197,94,0.4); }
 </style>
 </head>
 <body>
@@ -379,6 +411,10 @@
     <button id="btnRefreshModels" title="Re-fetch model list from Ollama">↻ Refresh</button>
     <button id="btnNewChat">New chat</button>
     <button id="btnMemory" title="Facts remembered about you, persisted server-side">🧠 Memory (<span id="memoryCount">0</span>)</button>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;user-select:none;">
+      <input type="checkbox" id="chkUncensored" style="cursor:pointer;">
+      Show uncensored/NSFW models
+    </label>
     <div class="status" id="statusBar"><span class="dot"></span><span id="statusText">Connecting…</span></div>
   </div>
 
@@ -388,6 +424,12 @@
       <input type="text" id="memoryInput" placeholder="Add a fact manually… (e.g. My name is Christian)">
       <button id="btnMemoryAdd">Add</button>
     </div>
+  </div>
+
+  <div class="pull-banner" id="pullBanner" style="display:none">
+    <span class="pull-text" id="pullText">Not pulled yet</span>
+    <div class="pull-progress-track"><div class="pull-progress-fill" id="pullProgressFill"></div></div>
+    <button id="btnPullNow">Pull now</button>
   </div>
 
   <div class="chat-panel">
@@ -430,6 +472,21 @@
   const memoryCount = document.getElementById("memoryCount");
   const memoryInput = document.getElementById("memoryInput");
   const btnMemoryAdd = document.getElementById("btnMemoryAdd");
+  const chkUncensored = document.getElementById("chkUncensored");
+  const pullBanner = document.getElementById("pullBanner");
+  const pullText = document.getElementById("pullText");
+  const pullProgressFill = document.getElementById("pullProgressFill");
+  const btnPullNow = document.getElementById("btnPullNow");
+
+  // name -> { pulled: bool, size_gb: number|null }
+  let modelInfo = {};
+
+  const UNCENSORED_KEY = "cppcoder.chat.showUncensored";
+  chkUncensored.checked = localStorage.getItem(UNCENSORED_KEY) === "1";
+  chkUncensored.addEventListener("change", function () {
+    localStorage.setItem(UNCENSORED_KEY, chkUncensored.checked ? "1" : "0");
+    loadModels();
+  });
 
   /** @type {{role: string, content: string}[]} */
   let history = [];
@@ -496,6 +553,11 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  // Populates the model dropdown with two groups: models already pulled
+  // (selectable), and curated suggestions that aren't pulled yet (shown
+  // disabled, with size and a fit warning based on detected local
+  // hardware). Suggestions aren't clickable here -- see footer note for
+  // the `ollama pull` command to run.
   async function loadModels() {
     modelSelect.disabled = true;
     modelSelect.innerHTML = "<option>Loading models…</option>";
@@ -507,27 +569,83 @@
         modelSelect.innerHTML = "<option>(no models — Ollama unreachable)</option>";
         return;
       }
+
       const models = data.models || [];
-      if (models.length === 0) {
-        setStatus("err", "Ollama reachable, but no models pulled yet");
-        modelSelect.innerHTML = "<option>(none pulled — try: ollama pull " + (data.default || "qwen2.5-coder:7b") + ")</option>";
-        return;
-      }
+      const suggestions = data.suggestions || [];
+      const hw = data.hardware || {};
+
       modelSelect.innerHTML = "";
-      for (const name of models) {
+
+      modelInfo = {};
+
+      if (models.length === 0) {
         const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
+        opt.textContent = "(none pulled — try: ollama pull " + (data.default || "qwen2.5-coder:7b") + ")";
+        opt.disabled = true;
         modelSelect.appendChild(opt);
+      } else {
+        const pulledGroup = document.createElement("optgroup");
+        pulledGroup.label = "Available";
+        for (const name of models) {
+          const opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          pulledGroup.appendChild(opt);
+          modelInfo[name] = { pulled: true, size_gb: null };
+        }
+        modelSelect.appendChild(pulledGroup);
       }
+
+      // Only suggest models that fit the detected hardware. If hardware
+      // couldn't be detected at all (ram_gb === 0), "fits" is already
+      // true for everything server-side, so nothing gets hidden here.
+      // "uncensored" category is further gated behind an explicit,
+      // off-by-default toggle rather than shown alongside coder models.
+      const fittingSuggestions = suggestions.filter(function (s) { return s.fits; });
+      const codingSuggestions = fittingSuggestions.filter(function (s) { return s.category !== "uncensored"; });
+      const uncensoredSuggestions = fittingSuggestions.filter(function (s) { return s.category === "uncensored"; });
+
+      function appendSuggestionGroup(label, list) {
+        if (list.length === 0) return;
+        const suggGroup = document.createElement("optgroup");
+        suggGroup.label = label;
+        for (const s of list) {
+          const opt = document.createElement("option");
+          opt.value = s.name;
+          const sizeLabel = s.size_gb.toFixed(1) + "GB";
+          opt.textContent = s.name + " — " + sizeLabel + " (not pulled)";
+          suggGroup.appendChild(opt);
+          modelInfo[s.name] = { pulled: false, size_gb: s.size_gb };
+        }
+        modelSelect.appendChild(suggGroup);
+      }
+
+      appendSuggestionGroup("Suggestions (not pulled, fits your hardware)", codingSuggestions);
+      if (chkUncensored.checked) {
+        appendSuggestionGroup("Uncensored / NSFW (not pulled, fits your hardware)", uncensoredSuggestions);
+      }
+
       const remembered = localStorage.getItem(MODEL_KEY);
-      if (remembered && models.includes(remembered)) {
+      if (remembered && modelInfo[remembered]) {
         modelSelect.value = remembered;
       } else if (models.includes(data.default)) {
         modelSelect.value = data.default;
       }
-      modelSelect.disabled = false;
-      setStatus("ok", models.length + " model" + (models.length === 1 ? "" : "s") + " available");
+
+      const hasAnyOption = Object.keys(modelInfo).length > 0;
+      if (hasAnyOption) {
+        modelSelect.disabled = false;
+        let statusMsg = models.length + " model" + (models.length === 1 ? "" : "s") + " available";
+        if (hw.ram_gb) {
+          statusMsg += " · " + hw.ram_gb.toFixed(0) + "GB RAM";
+          if (hw.vram_detected) statusMsg += " / " + hw.vram_gb.toFixed(0) + "GB VRAM";
+        }
+        setStatus(models.length > 0 ? "ok" : "", statusMsg);
+      } else {
+        setStatus("err", "Ollama reachable, but no models pulled yet");
+      }
+
+      updatePullBanner();
     } catch (e) {
       setStatus("err", "Could not reach chat server");
       modelSelect.innerHTML = "<option>(server unreachable)</option>";
@@ -618,8 +736,108 @@
 
   modelSelect.addEventListener("change", function () {
     localStorage.setItem(MODEL_KEY, modelSelect.value);
+    updatePullBanner();
   });
   btnRefreshModels.addEventListener("click", loadModels);
+
+  function updatePullBanner() {
+    const info = modelInfo[modelSelect.value];
+    if (!info || info.pulled) {
+      pullBanner.style.display = "none";
+      return;
+    }
+    pullBanner.style.display = "flex";
+    pullBanner.className = "pull-banner";
+    pullProgressFill.style.width = "0%";
+    const sizeLabel = info.size_gb ? " (~" + info.size_gb.toFixed(1) + "GB)" : "";
+    pullText.textContent = modelSelect.value + " isn't pulled yet" + sizeLabel;
+    btnPullNow.disabled = false;
+    btnPullNow.textContent = "Pull now";
+  }
+
+  btnPullNow.addEventListener("click", function () {
+    pullModel(modelSelect.value);
+  });
+
+  async function pullModel(model) {
+    btnPullNow.disabled = true;
+    btnPullNow.textContent = "Pulling…";
+    pullBanner.className = "pull-banner";
+    pullText.textContent = "Starting pull of " + model + "…";
+    pullProgressFill.style.width = "0%";
+
+    try {
+      const res = await fetch("/api/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: model }),
+      });
+      if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let sawError = false;
+      let succeeded = false;
+
+      function handleLine(line) {
+        line = line.trim();
+        if (!line) return;
+        let obj;
+        try { obj = JSON.parse(line); } catch (e) { return; }
+
+        if (obj.error) {
+          sawError = true;
+          pullText.textContent = "Pull failed: " + obj.error;
+          return;
+        }
+        if (typeof obj.total === "number" && typeof obj.completed === "number" && obj.total > 0) {
+          const pct = Math.min(100, Math.round((obj.completed / obj.total) * 100));
+          pullProgressFill.style.width = pct + "%";
+          pullText.textContent = (obj.status || "downloading") + " — " + pct + "%";
+        } else if (obj.status) {
+          pullText.textContent = obj.status;
+        }
+        if (obj.status === "success") {
+          succeeded = true;
+        }
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 1);
+          handleLine(line);
+        }
+      }
+      buffer += decoder.decode();
+      handleLine(buffer);
+
+      if (sawError) {
+        pullBanner.className = "pull-banner err";
+        btnPullNow.disabled = false;
+        btnPullNow.textContent = "Retry pull";
+        return;
+      }
+
+      pullProgressFill.style.width = "100%";
+      pullBanner.className = "pull-banner ok";
+      pullText.textContent = model + " pulled successfully";
+      await loadModels();
+      modelSelect.value = model;
+      localStorage.setItem(MODEL_KEY, model);
+      updatePullBanner();
+    } catch (e) {
+      pullBanner.className = "pull-banner err";
+      pullText.textContent = "Pull failed: " + e.message;
+      btnPullNow.disabled = false;
+      btnPullNow.textContent = "Retry pull";
+    }
+  }
 
   btnNewChat.addEventListener("click", function () {
     if (history.length && !confirm("Clear the current conversation?")) return;
@@ -650,6 +868,10 @@
     const model = modelSelect.value;
     if (!model || modelSelect.disabled) {
       setStatus("err", "No model selected");
+      return;
+    }
+    if (modelInfo[model] && !modelInfo[model].pulled) {
+      setStatus("err", "Pull " + model + " first (see the banner above)");
       return;
     }
 
