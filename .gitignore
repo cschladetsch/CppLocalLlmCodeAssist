@@ -9,3 +9,14 @@ compile_commands.json
 .vs/
 .vscode/
 *.user
+# .gitignore
+personas_private/
+*.private.yaml
+models/
+outputs/
+# .gitignore
+personas_private/
+*.private.json
+models/
+outputs/
+

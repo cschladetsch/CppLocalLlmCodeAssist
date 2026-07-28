@@ -404,10 +404,9 @@ int ChatServer::Run() {
                     forwardedError = true;
                     return false;
                 };
-                chatReq.content_receiver = [&sink](const char* data, size_t len, uint64_t,
-                                                    uint64_t) -> bool {
-                    return sink.write(data, len);
-                };
+		chatReq.content_receiver = [&sink](const char* data, size_t len, uint64_t, uint64_t) -> bool {
+			    return sink.write(data, len);
+		};
 
                 auto chatRes = ollama.send(chatReq);
                 if (!chatRes && !forwardedError) {

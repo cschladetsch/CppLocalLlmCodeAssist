@@ -40,6 +40,35 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+# Start Ollama if it isn't already running.
+$ollamaUp = $false
+try {
+    $null = Invoke-WebRequest -Uri "http://${ServeHost}:11434/api/tags" -UseBasicParsing -TimeoutSec 2
+    $ollamaUp = $true
+} catch {}
+
+if (-not $ollamaUp) {
+    Write-Host "Ollama not running -- starting it..." -ForegroundColor Yellow
+    Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Minimized
+    Write-Host "Waiting for Ollama to come up..." -ForegroundColor Cyan
+    $ready = $false
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Seconds 1
+        try {
+            $null = Invoke-WebRequest -Uri "http://${ServeHost}:11434/api/tags" -UseBasicParsing -TimeoutSec 2
+            $ready = $true
+            break
+        } catch {}
+    }
+    if ($ready) {
+        Write-Host "Ollama is up." -ForegroundColor Green
+    } else {
+        Write-Host "Ollama still not responding after 15s -- continuing anyway." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Ollama already running." -ForegroundColor Green
+}
+
 if (-not $SkipModelCheck) {
     Write-Host "Checking Ollama has '$Model' pulled..." -ForegroundColor Cyan
     try {
