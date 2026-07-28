@@ -1,0 +1,182 @@
+
+
+===== Ollama version =====
+Warning: could not connect to a running Ollama instance
+Warning: client version is 0.32.4
+
+===== Ollama /api/tags =====
+FAILED: No connection could be made because the target machine actively refused it. (127.0.0.1:11434)
+
+===== Ollama /api/version =====
+FAILED: No connection could be made because the target machine actively refused it. (127.0.0.1:11434)
+
+===== CppCoder server root =====
+FAILED: No connection could be made because the target machine actively refused it. (127.0.0.1:8765)
+
+===== CppCoder source: Ollama URL/path references =====
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:39: // GET /api/models -- model tags Ollama currently has pulled locally,
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:41: svr.Get("/api/models", [this](const httplib::Request&, httplib::Response& res) {
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:42: httplib::Client ollama(config_.ollamaHost, config_.ollamaPort);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:43: ollama.set_connection_timeout(5, 0);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:44: auto ollamaRes = ollama.Get("/api/tags");
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:50: if (ollamaRes && ollamaRes->status == 200) {
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:52: json parsed = json::parse(ollamaRes->body);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:57: spdlog::error("ChatServer: failed to parse /api/tags response: {}", e.what());
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:62: "Could not reach Ollama at " + config_.ollamaHost + ":" +
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:63: std::to_string(config_.ollamaPort) +
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:64: " -- is it running? (`ollama serve`)";
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:69: // GET /api/memory -- list every fact remembered about the user so far.
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:70: svr.Get("/api/memory", [this](const httplib::Request&, httplib::Response& res) {
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:76: // POST /api/memory -- manually add a fact (body: {"fact": "..."}),
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:78: svr.Post("/api/memory", [this](const httplib::Request& req, httplib::Response& res) {
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:94: // DELETE /api/memory -- forget a fact (body: {"fact": "..."}), exact
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:96: svr.Delete("/api/memory", [this](const httplib::Request& req, httplib::Response& res) {
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:112: // POST /api/chat -- plain conversational chat, no research engine
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:113: // involved. Proxies straight through to Ollama's own /api/chat and
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:123: svr.Post("/api/chat", [this](const httplib::Request& req, httplib::Response& res) {
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:162: // a blocking streaming POST to Ollama here, forwarding
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:170: httplib::Client ollama(config_.ollamaHost, config_.ollamaPort);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:171: ollama.set_read_timeout(60, 0);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:172: ollama.set_write_timeout(600, 0);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:173: ollama.set_connection_timeout(10, 0);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:177: chatReq.path = "/api/chat";
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:186: WriteNdjsonError(sink, "Ollama returned HTTP " + std::to_string(r.status));
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:195: auto chatRes = ollama.send(chatReq);
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:198: ? "Ollama did not send chat data for 60 seconds"
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:199: : "Ollama request failed: " +
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:202: spdlog::error("ChatServer: /api/chat proxy failed: {}",
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:213: spdlog::info("Ollama backend: {}:{}, default model: {}", config_.ollamaHost,
+C:\Users\chris\local\repos\CppCoder\src\ChatServer.cpp:214: config_.ollamaPort, config_.defaultModel);
+C:\Users\chris\local\repos\CppCoder\src\EditEngine.cpp:49: EditEngine::EditEngine(OllamaClient client, CodebaseScanner scanner, std::filesystem::path root,
+C:\Users\chris\local\repos\CppCoder\src\Editor.cpp:44: Editor::Editor(const OllamaClient& client, const CodebaseScanner& scanner,
+C:\Users\chris\local\repos\CppCoder\src\Editor.cpp:174: spdlog::error("Editor: Ollama call failed for area '{}'", area);
+C:\Users\chris\local\repos\CppCoder\src\Judge.cpp:14: Judge::Judge(const OllamaClient& client) : client_(client) {}
+C:\Users\chris\local\repos\CppCoder\src\Judge.cpp:92: spdlog::error("Judge: Ollama call failed for area '{}', passing finding through unfiltered",
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:5: #include "cppcoder/OllamaClient.h"
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:45: << "Shared Ollama options:\n"
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:46: << "  --model <name>           Ollama model tag (default: qwen2.5-coder:7b)\n"
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:47: << "  --host <host>            Ollama host (default: localhost)\n"
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:48: << "  --port <port>            Ollama port (default: 11434)\n"
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:91: cppcoder::OllamaConfig ollamaConfig;
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:115: ollamaConfig.model = next("--model");
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:117: ollamaConfig.host = next("--host");
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:119: ollamaConfig.port = std::stoi(next("--port"));
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:162: serverConfig.ollamaHost = ollamaConfig.host;
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:163: serverConfig.ollamaPort = ollamaConfig.port;
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:164: serverConfig.defaultModel = ollamaConfig.model;
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:171: "(pass --web-root explicitly). The /api/* endpoints still work.");
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:185: if (!deepseek::ModelStore::ModelExists(ollamaConfig.model)) {
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:187: "'{}' not found under shared model store ({}). Continuing -- Ollama manages "
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:189: ollamaConfig.model, deepseek::ModelStore::ResolveModelPath(ollamaConfig.model));
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:192: cppcoder::OllamaClient client(ollamaConfig);
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:195: "Ollama at {}:{} does not report model '{}' as available. Run `ollama pull {}` "
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:197: ollamaConfig.host, ollamaConfig.port, ollamaConfig.model, ollamaConfig.model);
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:284: // time on it. Ollama manages its own runtime, so this is advisory
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:286: if (!deepseek::ModelStore::ModelExists(ollamaConfig.model)) {
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:288: "'{}' not found under shared model store ({}). Continuing -- Ollama manages its "
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:290: ollamaConfig.model, deepseek::ModelStore::ResolveModelPath(ollamaConfig.model));
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:293: cppcoder::OllamaClient client(ollamaConfig);
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:296: "Ollama at {}:{} does not report model '{}' as available. Run `ollama pull {}` "
+C:\Users\chris\local\repos\CppCoder\src\main.cpp:298: ollamaConfig.host, ollamaConfig.port, ollamaConfig.model, ollamaConfig.model);
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:1: #include "cppcoder/OllamaClient.h"
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:11: OllamaClient::OllamaClient(OllamaConfig config) : config_(std::move(config)) {}
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:13: std::optional<std::string> OllamaClient::Generate(const std::string& prompt,
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:30: auto res = cli.Post("/api/generate", body.dump(), "application/json");
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:32: spdlog::error("OllamaClient: request failed, error={}", httplib::to_string(res.error()));
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:36: spdlog::error("OllamaClient: HTTP {}: {}", res->status, res->body);
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:44: spdlog::error("OllamaClient: failed to parse response JSON: {}", e.what());
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:49: bool OllamaClient::IsModelAvailable() const {
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:52: auto res = cli.Get("/api/tags");
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:69: std::vector<std::string> OllamaClient::ListModels() const {
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:72: auto res = cli.Get("/api/tags");
+C:\Users\chris\local\repos\CppCoder\src\OllamaClient.cpp:83: spdlog::error("OllamaClient: failed to parse /api/tags response: {}", e.what());
+C:\Users\chris\local\repos\CppCoder\src\ResearchEngine.cpp:71: ResearchEngine::ResearchEngine(OllamaClient client, CodebaseScanner scanner, EngineConfig config)
+C:\Users\chris\local\repos\CppCoder\src\Worker.cpp:25: Worker::Worker(const OllamaClient& client, const CodebaseScanner& scanner,
+C:\Users\chris\local\repos\CppCoder\src\Worker.cpp:131: spdlog::error("Worker: Ollama call failed for area '{}'", area);
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ChatServer.h:14: // Ollama connection used to service /api/models and /api/chat.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ChatServer.h:15: std::string ollamaHost = "localhost";
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ChatServer.h:16: int ollamaPort = 11434;
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ChatServer.h:30: // straight through to Ollama's /api/chat (no research engine involved --
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\EditEngine.h:5: #include "cppcoder/OllamaClient.h"
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\EditEngine.h:41: EditEngine(OllamaClient client, CodebaseScanner scanner, std::filesystem::path root,
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\EditEngine.h:51: // without a running Ollama instance.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\EditEngine.h:56: OllamaClient client_;
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Editor.h:4: #include "cppcoder/OllamaClient.h"
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Editor.h:17: Editor(const OllamaClient& client, const CodebaseScanner& scanner,
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Editor.h:24: // without a running Ollama instance.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Editor.h:28: const OllamaClient& client_;
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\JsonUtil.h:7: // Ollama models routinely wrap JSON in prose, markdown fences, or
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Judge.h:3: #include "cppcoder/OllamaClient.h"
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Judge.h:14: explicit Judge(const OllamaClient& client);
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Judge.h:20: // directly without a running Ollama instance.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Judge.h:24: const OllamaClient& client_;
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:9: struct OllamaConfig {
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:11: int port = 11434;
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:14: int numCtx = 32768;  // context window requested from Ollama
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:18: // Thin synchronous wrapper around Ollama's /api/generate endpoint.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:20: class OllamaClient {
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:22: explicit OllamaClient(OllamaConfig config);
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:29: // Returns true if Ollama is reachable and reports the configured
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:30: // model as available (via /api/tags).
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:33: // Returns the tags of every model Ollama currently has pulled locally
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:34: // (via /api/tags). Returns an empty vector if Ollama is unreachable.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:37: const OllamaConfig& config() const { return config_; }
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\OllamaClient.h:40: OllamaConfig config_;
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ResearchEngine.h:5: #include "cppcoder/OllamaClient.h"
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ResearchEngine.h:46: ResearchEngine(OllamaClient client, CodebaseScanner scanner, EngineConfig config = {});
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ResearchEngine.h:55: // without a running Ollama instance.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\ResearchEngine.h:60: OllamaClient client_;
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Worker.h:4: #include "cppcoder/OllamaClient.h"
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Worker.h:16: Worker(const OllamaClient& client, const CodebaseScanner& scanner,
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Worker.h:23: // without a running Ollama instance.
+C:\Users\chris\local\repos\CppCoder\include\cppcoder\Worker.h:27: const OllamaClient& client_;
+
+===== CppCoder web/chat.html: fetch/API references =====
+C:\Users\chris\local\repos\CppCoder\web\chat.html:407: <p class="footer-note">served locally by cppcoder --serve · proxies straight through to Ollama's /api/chat</p>
+C:\Users\chris\local\repos\CppCoder\web\chat.html:503: const res = await fetch("/api/models");
+C:\Users\chris\local\repos\CppCoder\web\chat.html:545: const res = await fetch("/api/memory");
+C:\Users\chris\local\repos\CppCoder\web\chat.html:574: await fetch("/api/memory", {
+C:\Users\chris\local\repos\CppCoder\web\chat.html:601: await fetch("/api/memory", {
+C:\Users\chris\local\repos\CppCoder\web\chat.html:682: const res = await fetch("/api/chat", {
+
+===== Listening ports (11434 / 8765) =====
+
+===== Running ollama/cppcoder processes =====
+
+   Id ProcessName StartTime
+   -- ----------- ---------
+14956 ollama app  7/28/2026 6:40:20 PM
+
+
+===== cppcoder.exe version/help =====
+Usage: C:\Users\chris\local\repos\CppCoder\build\src\cppcoder.exe --question "..." --codebase <path> [options]
+   or: C:\Users\chris\local\repos\CppCoder\build\src\cppcoder.exe --task "..." --codebase <path> [--apply] [options]
+   or: C:\Users\chris\local\repos\CppCoder\build\src\cppcoder.exe --serve [options]
+
+Research mode options:
+  --question <text>        Question to research (required unless --serve)
+  --codebase <path>        Root of the codebase to investigate (required unless --serve)
+  --max-minutes <n>        Wall clock budget in minutes (default: 90)
+  --max-iterations <n>     Max task loop iterations (default: 200)
+  --token-budget <n>       Approx tokens per task (default: 120000)
+  --events-file <path>     Write JSON-lines engine events for the web UI
+
+Edit mode options:
+  --task "..."             Change to make (implies edit mode; requires --codebase)
+  --apply                  Write proposed edits to disk (default: dry-run, propose only)
+
+Chat server mode options:
+  --serve                  Start the web chat UI + API instead of researching
+  --serve-host <addr>      Address to bind the chat server to (default: 127.0.0.1)
+  --serve-port <port>      Port to bind the chat server to (default: 8765)
+  --web-root <path>        Directory to serve as the chat UI (default: auto-detect ./web)
+  --memory-file <path>     Facts file to persist/read (default: ~/.models/memory.json)
+
+Shared Ollama options:
+  --model <name>           Ollama model tag (default: qwen2.5-coder:7b)
+  --host <host>            Ollama host (default: localhost)
+  --port <port>            Ollama port (default: 11434)
+
+Logging options:
+  --log-level <level>      trace|debug|info|warn|err|critical|off (default: info)
+  --log-file <path>        Also write logs to this file
