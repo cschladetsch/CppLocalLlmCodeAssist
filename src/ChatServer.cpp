@@ -1,6 +1,7 @@
 #include "cppcoder/ChatServer.h"
 
 #include "cppcoder/FactExtractor.h"
+#include "cppcoder/LocalCommands.h"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -8,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -141,6 +143,26 @@ int ChatServer::Run() {
     spdlog::info("Detected hardware: {:.1f} GB RAM, {}", hw.ram_gb,
                  hw.vram_detected ? (std::to_string(static_cast<int>(hw.vram_gb)) + " GB VRAM")
                                   : "no NVIDIA GPU detected");
+
+    // Sandbox root for the local /ls, /read and /write chat commands.
+    // Resolved once here rather than per request so the reachable area
+    // can't shift if something later changes the process cwd, and so a
+    // "not in a repo" fallback is reported once at startup instead of
+    // silently on every command.
+    const std::filesystem::path cwd = std::filesystem::current_path();
+    const std::filesystem::path fileRoot = FindRepoRoot(cwd);
+    // FindRepoRoot returns its argument on failure, and cwd may itself
+    // be the repository root, so probe for .git rather than comparing.
+    std::error_code rootEc;
+    if (!std::filesystem::exists(fileRoot / ".git", rootEc)) {
+        spdlog::warn(
+            "ChatServer: no enclosing git repository found -- /ls, /read and /write are "
+            "confined to the current directory '{}'",
+            cwd.string());
+    } else {
+        spdlog::info("ChatServer: /ls, /read and /write are confined to the repository root '{}'",
+                     fileRoot.string());
+    }
 
     if (!config_.webRoot.empty()) {
         if (!svr.set_mount_point("/", config_.webRoot)) {
@@ -337,7 +359,13 @@ int ChatServer::Run() {
     // goes out, and every fact known so far is prepended as a system
     // message so the assistant has them regardless of which model is
     // selected or whether this is a brand new conversation.
-    svr.Post("/api/chat", [this](const httplib::Request& req, httplib::Response& res) {
+    //
+    // Also intercepts local filesystem commands -- /pwd, /cwd, /ls
+    // [path], /read <path>, /write <path>\n<content> -- and answers
+    // them directly against `fileRoot` (the enclosing git checkout)
+    // instead of forwarding to Ollama at all. See LocalCommands.h/.cpp
+    // for the implementation and LocalCommandsTests.cpp for coverage.
+    svr.Post("/api/chat", [this, fileRoot](const httplib::Request& req, httplib::Response& res) {
         json in;
         try {
             in = json::parse(req.body);
@@ -349,9 +377,34 @@ int ChatServer::Run() {
         }
 
         json messages = in.value("messages", json::array());
+        std::string requestedModel = in.value("model", config_.defaultModel);
 
+        // /pwd, /cwd, /ls, /read, /write: handled locally against the
+        // repository root (LocalCommands.h) and never forwarded to
+        // Ollama -- the model itself has no filesystem access.
         if (!messages.empty() && messages.back().value("role", std::string{}) == "user") {
             std::string latest = messages.back().value("content", std::string{});
+
+            LocalCommandResult localResult = TryHandleLocalCommand(latest, fileRoot);
+            if (localResult.handled) {
+                res.set_chunked_content_provider(
+                    "application/x-ndjson",
+                    [requestedModel, text = localResult.text](size_t offset,
+                                                                httplib::DataSink& sink) -> bool {
+                        if (offset != 0) return false;
+                        json chunk{
+                            {"model", requestedModel},
+                            {"message", {{"role", "assistant"}, {"content", text}}},
+                            {"done", true},
+                        };
+                        std::string line = chunk.dump() + "\n";
+                        sink.write(line.data(), line.size());
+                        sink.done();
+                        return false;
+                    });
+                return;
+            }
+
             for (const auto& fact : ExtractFacts(latest)) {
                 memory_.AddFact(fact);
             }

@@ -40,7 +40,7 @@ own server's `/api/*` routes, never to Ollama directly:
 | Route | Used for |
 |---|---|
 | `GET /api/models` | populate the model dropdown (falls back to a "no models pulled" hint if the list is empty) |
-| `POST /api/chat` | send the conversation so far; streamed NDJSON response forwarded straight through from Ollama's own `/api/chat` |
+| `POST /api/chat` | send the conversation so far; streamed NDJSON response forwarded straight through from Ollama's own `/api/chat`. Exception: if the latest message is a local filesystem command (`/pwd`, `/ls`, `/read`, `/write` -- see [Local filesystem commands](../README.md#local-filesystem-commands)) the server answers it itself in the same NDJSON shape and never contacts Ollama |
 | `GET /api/memory` | populate the 🧠 memory panel |
 | `POST /api/memory` | manually add a fact |
 | `DELETE /api/memory` | forget a fact |

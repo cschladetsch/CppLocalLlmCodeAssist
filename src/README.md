@@ -20,7 +20,8 @@ Builds into one static library, `cppcoder_core`, linked by the
 | `Editor.cpp` | `Editor` | Same shape as `Worker`, but asks the model for full replacement file content instead of a research summary; parses it into an `EditFinding` (`ParseEditResponse`). |
 | `PatchApplier.cpp` | `PatchApplier` | Writes `ProposedEdit`s to disk, rejecting any path that would resolve outside the codebase root (path-traversal / absolute-path guard). |
 | `EditEngine.cpp` | `EditEngine` | Edit-mode's orchestration loop: same keyword-seeded task queue as `ResearchEngine`, but drives `Editor` (no judge step) and either accumulates or applies proposed edits. |
-| `ChatServer.cpp` | `ChatServer` | httplib **server**: static file serving, `/api/models`, `/api/memory` (GET/POST/DELETE), `/api/chat` (streaming proxy to Ollama). |
+| `ChatServer.cpp` | `ChatServer` | httplib **server**: static file serving, `/api/models`, `/api/memory` (GET/POST/DELETE), `/api/chat` (streaming proxy to Ollama). Resolves the local-command root once in `Run()`. |
+| `LocalCommands.cpp` | `FindRepoRoot`, `TryHandleLocalCommand` | The `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer` answers itself, plus the walk-up-for-`.git` search that picks the root they're confined to. Takes the root as a parameter so it's testable against a temp directory. |
 | `MemoryStore.cpp` | `MemoryStore` | JSON read/write of the facts file, mutex-guarded, case-insensitive dedup. |
 | `FactExtractor.cpp` | `ExtractFacts` | The regex pattern table -- see comments there before adding a new phrasing. |
 | `main.cpp` | CLI entry point | Argument parsing, then dispatches to the research loop, the edit loop, or `ChatServer::Run()`. |
@@ -44,6 +45,7 @@ flowchart TD
         ChatServer.cpp
         MemoryStore.cpp
         FactExtractor.cpp
+        LocalCommands.cpp
     end
 
     lib -->|PUBLIC| NJ[("nlohmann_json")]

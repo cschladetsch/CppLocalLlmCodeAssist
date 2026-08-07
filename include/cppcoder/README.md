@@ -42,6 +42,7 @@ the only thing that wires all three to a CLI flag (`--question` vs
 | `ChatServer.h` | Local HTTP server (cpp-httplib) serving `web/chat.html` and proxying `/api/chat` straight through to Ollama, streaming NDJSON back. Owns a `MemoryStore`. |
 | `MemoryStore.h` | Thread-safe persisted fact list (`~/.models/memory.json` by default) with case-insensitive dedup on add. |
 | `FactExtractor.h` | `ExtractFacts(message)` -- regex heuristics that pull durable facts ("my name is...", "I am NN yo") out of a single chat message. |
+| `LocalCommands.h` | `TryHandleLocalCommand(message, root)` -- the `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer` answers itself instead of forwarding to Ollama, confined to `root`. Plus `FindRepoRoot(start)`, the walk-up-for-`.git` search `ChatServer` uses to pick that root. |
 
 ## Class diagram
 
@@ -184,9 +185,14 @@ classDiagram
         +bool RemoveFact(string)
         +string ResolveDefaultPath()$
     }
+    class LocalCommandResult {
+        +bool handled
+        +string text
+    }
     ChatServer --> ChatServerConfig
     ChatServer --> MemoryStore
     ChatServer ..> FactExtractor : ExtractFacts()
+    ChatServer ..> LocalCommandResult : TryHandleLocalCommand(msg, FindRepoRoot(cwd))
     ChatServer --> OllamaClient : proxies to
 ```
 

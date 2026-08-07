@@ -170,6 +170,7 @@ flowchart TD
         ChatServer
         MemoryStore
         FactExtractor
+        LocalCommands
     end
 
     Worker --> OllamaClient
@@ -187,6 +188,7 @@ flowchart TD
     EditEngine --> CodebaseScanner
     ChatServer --> MemoryStore
     ChatServer --> FactExtractor
+    ChatServer --> LocalCommands
     ChatServer --> HTTPLIB[("cpp-httplib (server)")]
     core --> ModelStore
     core --> Spdlog
@@ -211,7 +213,7 @@ flowchart TD
 CppCoder/
 ├── include/cppcoder/     Public headers -- see include/cppcoder/README.md
 ├── src/                  Implementation + main.cpp -- see src/README.md
-├── tests/                133 GoogleTest cases -- see tests/README.md
+├── tests/                167 GoogleTest cases -- see tests/README.md
 ├── examples/             replay_demo, minimal_usage -- see examples/README.md
 ├── web/                  index.html + chat.html -- see web/README.md
 └── external/             git submodules: CppLmmModelStore, spdlog, googletest
@@ -220,7 +222,7 @@ CppCoder/
 ## Quick start
 
 `t.ps1` is the main entry point (PowerShell 7+, cross-platform):
-initializes submodules if needed, configures, builds, and runs all 133
+initializes submodules if needed, configures, builds, and runs all 167
 tests in one command.
 
 ```
@@ -398,6 +400,35 @@ panel to view, add, or forget facts by hand (`GET`/`POST`/`DELETE
 
 See [web/README.md](web/README.md) for the frontend side of this.
 
+### Local filesystem commands
+
+Ollama only ever sees plain text, so the model itself has no filesystem
+access. To make the checkout reachable from chat anyway, `ChatServer`
+intercepts a few slash commands *before* a message is forwarded, runs
+them itself, and streams the result back in the same NDJSON shape Ollama
+would have produced. These turns never leave the machine.
+
+| Command | Description |
+|---|---|
+| `/pwd`, `/cwd` | Print the root these commands are confined to |
+| `/ls [path]` | List a directory (defaults to the root) |
+| `/read <path>`, `/cat <path>` | Print a file, truncated at 200 KB |
+| `/write <path>`<br>`<content>` | Write a file (creates parent directories; content starts on the second line) |
+
+The root is the **toplevel of the enclosing git repository** -- the same
+directory `git rev-parse --show-toplevel` reports -- found by walking up
+from the server's working directory until a `.git` entry appears. Both a
+`.git` directory and the `.git` *file* used by worktrees and submodules
+count, and the nearest enclosing repository wins, so running inside a
+submodule scopes to that submodule. Started outside any repository, the
+commands fall back to the working directory and log a warning at startup.
+
+Every path argument is resolved against that root and rejected if it
+would escape: absolute paths are refused outright, and `..` segments and
+symlinks are resolved before the containment check rather than followed
+(the same guard `PatchApplier` applies to the codebase root). See
+[`include/cppcoder/LocalCommands.h`](include/cppcoder/LocalCommands.h).
+
 ## Logging
 
 All runtime logging goes through [spdlog](https://github.com/gabime/spdlog)
@@ -413,7 +444,7 @@ diagnostic logging.
 
 ## Test
 
-133 tests in `cppcoder_tests` (this repo's own suite) plus 3 more inside
+167 tests in `cppcoder_tests` (this repo's own suite) plus 3 more inside
 the `external/CppLmmModelStore` submodule (`ModelStoreTests`,
 `StreamParserTests`) -- 136 total, all pure/offline. The network-facing
 parts are tested via pure functions -- `Worker::ParseWorkerResponse`,
