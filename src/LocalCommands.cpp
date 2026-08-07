@@ -49,13 +49,24 @@ bool IsWithinRoot(const fs::path& resolved, const fs::path& root) {
     return true;
 }
 
-std::optional<fs::path> ResolveLocalPath(const std::string& userPath, const fs::path& root) {
+}  // namespace
+
+std::optional<fs::path> ResolveWithinRoot(const std::string& userPath, const fs::path& root) {
     fs::path candidate(userPath);
     if (candidate.is_absolute()) return std::nullopt;
 
     fs::path resolved = root / candidate;
     if (!IsWithinRoot(resolved, root)) return std::nullopt;
     return resolved;
+}
+
+namespace {
+
+// The chat commands funnel through this so their error text stays
+// uniform; it is just ResolveWithinRoot under the name the handlers
+// below already used.
+std::optional<fs::path> ResolveLocalPath(const std::string& userPath, const fs::path& root) {
+    return ResolveWithinRoot(userPath, root);
 }
 
 LocalCommandResult HandlePwd(const fs::path& root) {

@@ -17,11 +17,16 @@ std::optional<std::string> OllamaClient::Generate(const std::string& prompt,
     cli.set_write_timeout(config_.timeoutSeconds, 0);
     cli.set_connection_timeout(10, 0);
 
+    json options = {{"temperature", config_.temperature}};
+    if (config_.numCtx > 0) {
+        options["num_ctx"] = config_.numCtx;
+    }
+
     json body = {
         {"model", config_.model},
         {"prompt", prompt},
         {"stream", false},
-        {"options", {{"temperature", config_.temperature}, {"num_ctx", config_.numCtx}}},
+        {"options", std::move(options)},
     };
     if (!systemPrompt.empty()) {
         body["system"] = systemPrompt;

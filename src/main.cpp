@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
     int servePort = 8765;
     std::string webRoot;
     std::string memoryFilePath;
+    bool fileContextEnabled = true;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -139,6 +140,8 @@ int main(int argc, char** argv) {
             webRoot = next("--web-root");
         } else if (arg == "--memory-file") {
             memoryFilePath = next("--memory-file");
+        } else if (arg == "--no-file-context") {
+            fileContextEnabled = false;
         } else if (arg == "--log-level") {
             logLevel = next("--log-level");
         } else if (arg == "--log-file") {
@@ -164,6 +167,7 @@ int main(int argc, char** argv) {
         serverConfig.defaultModel = ollamaConfig.model;
         serverConfig.webRoot = webRoot.empty() ? ResolveDefaultWebRoot(argv[0]) : webRoot;
         serverConfig.memoryFilePath = memoryFilePath;
+        serverConfig.fileContextEnabled = fileContextEnabled;
 
         if (serverConfig.webRoot.empty()) {
             spdlog::warn(

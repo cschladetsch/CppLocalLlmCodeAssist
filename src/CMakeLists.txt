@@ -14,6 +14,7 @@ add_library(cppcoder_core
     MemoryStore.cpp
     FactExtractor.cpp
     LocalCommands.cpp
+    FileRetriever.cpp
 )
 target_include_directories(cppcoder_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(cppcoder_core

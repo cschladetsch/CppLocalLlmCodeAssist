@@ -2,6 +2,7 @@
 
 #include "cppcoder/MemoryStore.h"
 
+#include <filesystem>
 #include <string>
 
 namespace cppcoder {
@@ -23,6 +24,12 @@ struct ChatServerConfig {
     // Path to the persisted facts file (see MemoryStore). Empty means
     // "use MemoryStore::ResolveDefaultPath()".
     std::string memoryFilePath;
+
+    // Whether to run the retrieval pre-pass (FileRetriever.h) that lets
+    // the assistant read repository files before answering. Costs one
+    // extra non-streaming model round trip per chat turn, so it's worth
+    // turning off for pure conversational use on slow hardware.
+    bool fileContextEnabled = true;
 };
 
 // Minimal local web server backing the "Claude for Desktop"-style chat
@@ -43,6 +50,14 @@ public:
     int Run();
 
 private:
+    // Runs the retrieval pre-pass for one user message and returns the
+    // system message to inject, or an empty string for "no context" --
+    // which covers the model asking for nothing, Ollama being
+    // unreachable, an unparseable reply, and every requested path being
+    // unreadable. Never throws; a failed pre-pass must not fail the turn.
+    std::string BuildFileContext(const std::string& userMessage, const std::string& model,
+                                  const std::filesystem::path& root) const;
+
     ChatServerConfig config_;
     MemoryStore memory_;
 };

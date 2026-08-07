@@ -19,7 +19,7 @@ the only thing that wires all three to a CLI flag (`--question` vs
 |---|---|
 | `Types.h` | `Task`, `Finding`, `WorkerOutcome`, `EditFinding`, `EditOutcome`, `ProposedEdit`, `EventSink`, `EstimateTokens()` -- the shared vocabulary every other research- and edit-engine header builds on. |
 | `TaskQueue.h` | FIFO queue with area-dedup: rejects a `Task` if its `targetArea` is already queued or already visited. Shared by `ResearchEngine` and `EditEngine`. |
-| `CodebaseScanner.h` | Reads source files under a root/target area within a token budget; also does a cheap keyword grep used to seed initial tasks. Shared by `ResearchEngine` and `EditEngine`. |
+| `CodebaseScanner.h` | Reads source files under a root/target area within a token budget; also does a cheap keyword grep used to seed initial tasks, and a contents-free `ListFiles`. Excluded directory names are configurable (`.git`/`build` by default). Shared by `ResearchEngine`, `EditEngine` and `FileRetriever`. |
 | `OllamaClient.h` | Thin synchronous wrapper around Ollama's `/api/generate` (used by `Worker`/`Judge`/`Editor`) and `/api/tags` (`IsModelAvailable`, `ListModels`). |
 | `Worker.h` | Executes one `Task`: gathers context via `CodebaseScanner`, calls the model, parses the response into a `Finding`. `ParseWorkerResponse` is pure/static and unit-testable without Ollama running. |
 | `Judge.h` | Reviews a `Worker`'s `Finding` against the original question and prunes off-topic content/directions. `ApplyJudgeResponse` is pure/static, same testability story as `Worker`. |
@@ -42,6 +42,7 @@ the only thing that wires all three to a CLI flag (`--question` vs
 | `ChatServer.h` | Local HTTP server (cpp-httplib) serving `web/chat.html` and proxying `/api/chat` straight through to Ollama, streaming NDJSON back. Owns a `MemoryStore`. |
 | `MemoryStore.h` | Thread-safe persisted fact list (`~/.models/memory.json` by default) with case-insensitive dedup on add. |
 | `FactExtractor.h` | `ExtractFacts(message)` -- regex heuristics that pull durable facts ("my name is...", "I am NN yo") out of a single chat message. |
+| `FileRetriever.h` | The retrieval pre-pass that gives the assistant repository access: `FindLikelyFiles` (grep-rank candidates), `BuildRetrievalPrompt`, `ParseFileRequests`, `ReadRequestedFiles` (root-confined, budgeted), `FormatFileContext`. Pure apart from the file reads, so it's testable without Ollama. |
 | `LocalCommands.h` | `TryHandleLocalCommand(message, root)` -- the `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer` answers itself instead of forwarding to Ollama, confined to `root`. Plus `FindRepoRoot(start)`, the walk-up-for-`.git` search `ChatServer` uses to pick that root. |
 
 ## Class diagram
@@ -88,6 +89,7 @@ classDiagram
     class CodebaseScanner {
         +ScanResult Scan(targetArea, tokenBudget)
         +string[] FindFilesMatchingKeyword(keyword, maxResults)
+        +string[] ListFiles(maxResults)
     }
 
     class OllamaClient {
@@ -192,7 +194,16 @@ classDiagram
     ChatServer --> ChatServerConfig
     ChatServer --> MemoryStore
     ChatServer ..> FactExtractor : ExtractFacts()
+    class RetrievedFile {
+        +string path
+        +string content
+        +bool ok
+        +bool truncated
+        +string error
+    }
     ChatServer ..> LocalCommandResult : TryHandleLocalCommand(msg, FindRepoRoot(cwd))
+    ChatServer ..> RetrievedFile : BuildFileContext()
+    RetrievedFile ..> CodebaseScanner : FindLikelyFiles()
     ChatServer --> OllamaClient : proxies to
 ```
 

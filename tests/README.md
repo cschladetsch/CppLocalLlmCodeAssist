@@ -1,6 +1,6 @@
 # tests/
 
-167 GoogleTest cases, all offline -- nothing here needs a running Ollama
+205 GoogleTest cases, all offline -- nothing here needs a running Ollama
 instance. Everything that would normally require the network is tested
 by calling a pure/static parsing function directly with a canned model
 response (see `include/cppcoder/README.md`'s "pure-function testability"
@@ -26,7 +26,7 @@ ctest -E 'ModelStoreTests|StreamParserTests'
 | `JsonUtilTests.cpp` | 16 | `ExtractJsonObject`/`ExtractJsonArray`: plain, prose-wrapped, markdown-fenced, nested, empty, and malformed input. |
 | `TypesTests.cpp` | 8 | `Task` default field values, `EstimateTokens` scaling. |
 | `TaskQueueTests.cpp` | 13 | Push/pop order, area dedup (queued + visited), repeatable-task umbrella semantics. |
-| `CodebaseScannerTests.cpp` | 15 | Recursive scan, `.git`/`build` exclusion, token-budget truncation, single-file vs. directory target areas, keyword search (case-insensitivity, filename matches, result caps). |
+| `CodebaseScannerTests.cpp` | 18 | Recursive scan, `.git`/`build` exclusion, token-budget truncation, single-file vs. directory target areas, keyword search (case-insensitivity, filename matches, result caps), `ListFiles` (sorted, excludes vendored/untracked, respects the cap). |
 | `WorkerTests.cpp` | 13 | `ParseWorkerResponse`: all three outcomes, malformed/prose-wrapped/empty responses, direction-id generation. |
 | `JudgeTests.cpp` | 12 | `ApplyJudgeResponse`: direction pruning by index, summary filtering, outcome downgrade when nothing survives, malformed/truncated judge JSON. |
 | `ResearchEngineTests.cpp` | 11 | `FallbackKeywords` (stopwords, casing, short-word filtering) and `SeedInitialTasks` (dedup across keyword matches). |
@@ -37,6 +37,8 @@ ctest -E 'ModelStoreTests|StreamParserTests'
 | `FactExtractorTests.cpp` | 8 | Name/age regex patterns (with and without "is"), assistant-name phrasing, multi-fact messages, no-match cases. |
 | `LocalCommandsTests.cpp` | 34 | `TryHandleLocalCommand`: `/pwd`, `/ls`, `/read`, `/write` behaviour and their aliases, non-command fall-through, path-traversal and absolute-path rejection, read truncation, multi-line writes. Plus `FindRepoRoot`: `.git` directory vs. `.git` file, nested start, nearest-repository-wins, no-repository fall back to `start`, filesystem-root termination. |
 
+| `FileRetrieverTests.cpp` | 35 | The chat-mode retrieval pre-pass. `FindLikelyFiles`: content-not-filename matching, rank-by-match-count, conversational-word and saturated-term filtering. `ParseFileRequests`: plain/fenced/prose-wrapped JSON, malformed and non-array replies, non-string entries. `ReadRequestedFiles`: root confinement, hallucinated paths reported rather than dropped, per-file and total byte budgets, file-count cap. `FormatFileContext`: headers, truncation markers, all-failed yielding no context. |
+
 ## Test composition
 
 ```mermaid
@@ -45,7 +47,7 @@ flowchart TD
         JsonUtilTests["JsonUtilTests.cpp (16)"]
         TypesTests["TypesTests.cpp (8)"]
         TaskQueueTests["TaskQueueTests.cpp (13)"]
-        CodebaseScannerTests["CodebaseScannerTests.cpp (15)"]
+        CodebaseScannerTests["CodebaseScannerTests.cpp (18)"]
         WorkerTests["WorkerTests.cpp (13)"]
         JudgeTests["JudgeTests.cpp (12)"]
         ResearchEngineTests["ResearchEngineTests.cpp (11)"]
@@ -55,6 +57,7 @@ flowchart TD
         MemoryStoreTests["MemoryStoreTests.cpp (9)"]
         FactExtractorTests["FactExtractorTests.cpp (8)"]
         LocalCommandsTests["LocalCommandsTests.cpp (34)"]
+        FileRetrieverTests["FileRetrieverTests.cpp (35)"]
     end
     exe --> cppcoder_core
     exe --> GTest[("GTest::gtest_main")]

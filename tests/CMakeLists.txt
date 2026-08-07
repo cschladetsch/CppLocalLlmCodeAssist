@@ -16,6 +16,7 @@ add_executable(cppcoder_tests
     MemoryStoreTests.cpp
     FactExtractorTests.cpp
     LocalCommandsTests.cpp
+    FileRetrieverTests.cpp
 )
 target_link_libraries(cppcoder_tests PRIVATE cppcoder_core GTest::gtest_main)
 target_include_directories(cppcoder_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)

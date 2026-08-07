@@ -90,7 +90,7 @@
 .EXAMPLE
     ./r.ps1
     Init submodules (if needed), configure with clang-cl on Windows
-    (auto), build, run all 167 tests.
+    (auto), build, run all 205 tests.
 
 .EXAMPLE
     ./r.ps1 -Question "How does the judge prune directions?" -Codebase .

@@ -11,7 +11,13 @@ struct OllamaConfig {
     int port = 11434;
     std::string model = "qwen2.5-coder:7b";
     double temperature = 0.2;
-    int numCtx = 32768;  // context window requested from Ollama
+    // Context window requested from Ollama. 0 means "don't send num_ctx
+    // at all", letting Ollama use the model's own default -- which
+    // matters because Ollama reloads a model whenever num_ctx changes,
+    // so a caller that shares a model with the plain /api/chat proxy
+    // (which sends no options) must send none either or every turn pays
+    // for two reloads.
+    int numCtx = 32768;
     int timeoutSeconds = 300;
 };
 

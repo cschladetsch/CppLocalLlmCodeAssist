@@ -1,9 +1,21 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 
 namespace cppcoder {
+
+// Resolves a user-supplied path against `root` and returns it only if it
+// stays inside: absolute paths are refused outright, and ".." segments
+// and symlinks are resolved *before* the containment check rather than
+// followed, so neither can be used to climb out. Returns nullopt when
+// the path escapes.
+//
+// Shared by the chat commands below and by FileRetriever, so a model's
+// file requests are held to exactly the same boundary a user's /read is.
+std::optional<std::filesystem::path> ResolveWithinRoot(const std::string& userPath,
+                                                        const std::filesystem::path& root);
 
 // Walks up from `start` looking for a ".git" entry and returns the
 // directory containing it -- the repository's toplevel, the same

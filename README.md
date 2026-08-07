@@ -171,6 +171,7 @@ flowchart TD
         MemoryStore
         FactExtractor
         LocalCommands
+        FileRetriever
     end
 
     Worker --> OllamaClient
@@ -189,6 +190,9 @@ flowchart TD
     ChatServer --> MemoryStore
     ChatServer --> FactExtractor
     ChatServer --> LocalCommands
+    ChatServer --> FileRetriever
+    FileRetriever --> CodebaseScanner
+    FileRetriever --> LocalCommands
     ChatServer --> HTTPLIB[("cpp-httplib (server)")]
     core --> ModelStore
     core --> Spdlog
@@ -213,7 +217,7 @@ flowchart TD
 CppCoder/
 ├── include/cppcoder/     Public headers -- see include/cppcoder/README.md
 ├── src/                  Implementation + main.cpp -- see src/README.md
-├── tests/                167 GoogleTest cases -- see tests/README.md
+├── tests/                205 GoogleTest cases -- see tests/README.md
 ├── examples/             replay_demo, minimal_usage -- see examples/README.md
 ├── web/                  index.html + chat.html -- see web/README.md
 └── external/             git submodules: CppLmmModelStore, spdlog, googletest
@@ -222,7 +226,7 @@ CppCoder/
 ## Quick start
 
 `t.ps1` is the main entry point (PowerShell 7+, cross-platform):
-initializes submodules if needed, configures, builds, and runs all 167
+initializes submodules if needed, configures, builds, and runs all 205
 tests in one command.
 
 ```
@@ -395,10 +399,73 @@ panel to view, add, or forget facts by hand (`GET`/`POST`/`DELETE
 | `--serve-port <port>` | `8765` | Port to bind the chat server to |
 | `--web-root <path>` | auto-detect `./web` | Directory to serve as the chat UI |
 | `--memory-file <path>` | `~/.models/memory.json` | Facts file to persist/read |
+| `--no-file-context` | *(pre-pass on)* | Disable the retrieval pre-pass described below |
 | `--model <name>` | `qwen2.5-coder:7b` | Default Ollama model tag (switchable per-conversation from the UI) |
 | `--host` / `--port` | `localhost` / `11434` | Ollama connection used to service `/api/models` and `/api/chat` |
 
 See [web/README.md](web/README.md) for the frontend side of this.
+
+### Repository-aware answers
+
+Ollama only ever sees plain text, so the model has no filesystem access
+of its own. Chat mode closes that gap with a **retrieval pre-pass**: a
+single extra non-streaming call, made before the turn is proxied, that
+asks the model which repository files it needs. Whatever it names is
+read and injected as a system message, and the normal streaming turn
+then runs unchanged.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as ChatServer
+    participant G as CodebaseScanner (grep)
+    participant O as Ollama
+
+    B->>S: POST /api/chat {messages}
+    S->>G: FindLikelyFiles(message)
+    G-->>S: candidates ranked by term matches
+    alt no candidates
+        Note over S: message isn't about this code --<br/>skip the pre-pass entirely
+    else
+        S->>O: Generate("which of these do you need?")
+        O-->>S: {"files": [...]}
+        S->>S: read them (git-root confined)
+        S->>S: prepend as a system message
+    end
+    S->>O: POST /api/chat (streaming, unchanged)
+    O-->>B: NDJSON forwarded live
+```
+
+Candidates come from a **content** grep, not filenames: asked what
+`FindRepoRoot` does, a small model offered a list of paths picks
+`CodebaseScanner.cpp` because the name sounds right, then confidently
+describes a function that isn't there. It actually lives in
+`LocalCommands.cpp`. Grepping file contents for identifier-like terms
+from the message (the same `FallbackKeywords` research mode uses to seed
+its first task) surfaces the right file immediately.
+
+Two filters keep the shortlist honest. Conversational words are dropped
+-- "you" survives the research-tuned stopword list and appears in a
+comment in nearly every file, which alone made "hello, how are you
+today?" look like a code question. And any term that saturates the
+per-keyword search cap is discarded, since a term matching everything
+discriminates nothing.
+
+If the grep finds nothing, the pre-pass is skipped outright and the turn
+costs no extra round trip -- small talk and general questions stay fast.
+Retrieval is capped at 4 files, 24 KB each, 64 KB total, and every path
+the model names goes through the same root confinement as `/read`, so a
+hallucinated `../../.ssh/id_rsa` is refused rather than followed.
+
+The whole step is best-effort: if Ollama is unreachable, the reply is
+unparseable, or nothing readable comes back, the turn proceeds as an
+ordinary contextless chat rather than failing. Pass `--no-file-context`
+to turn it off.
+
+This is deliberately one retrieval step rather than a tool-call loop --
+it works with every model, needs no native tool support, and leaves the
+`/api/chat` proxy a straight pass-through. The tradeoff is that the
+model cannot read, think, and then read again within a single turn.
 
 ### Local filesystem commands
 
@@ -444,7 +511,7 @@ diagnostic logging.
 
 ## Test
 
-167 tests in `cppcoder_tests` (this repo's own suite) plus 3 more inside
+205 tests in `cppcoder_tests` (this repo's own suite) plus 3 more inside
 the `external/CppLmmModelStore` submodule (`ModelStoreTests`,
 `StreamParserTests`) -- 136 total, all pure/offline. The network-facing
 parts are tested via pure functions -- `Worker::ParseWorkerResponse`,

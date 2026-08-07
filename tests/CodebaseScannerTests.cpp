@@ -150,4 +150,32 @@ TEST_F(CodebaseScannerTest, FindFilesMatchingKeywordExcludesGitAndBuild) {
     }
 }
 
+TEST_F(CodebaseScannerTest, ListFilesReturnsTrackedFilesSorted) {
+    cppcoder::CodebaseScanner scanner(root_);
+    auto files = scanner.ListFiles();
+    // Same three files Scan() picks up, in forward-slash form.
+    ASSERT_EQ(files.size(), 3u);
+    EXPECT_EQ(files[0], "foo.cpp");
+    EXPECT_EQ(files[1], "sub/bar.h");
+    EXPECT_EQ(files[2], "sub/deeper/baz.cpp");
+}
+
+TEST_F(CodebaseScannerTest, ListFilesExcludesGitBuildAndUntrackedExtensions) {
+    cppcoder::CodebaseScanner scanner(root_);
+    for (const auto& f : scanner.ListFiles()) {
+        EXPECT_EQ(f.find(".git"), std::string::npos);
+        EXPECT_EQ(f.find("build/"), std::string::npos);
+        EXPECT_EQ(f.find("notes.txt"), std::string::npos);
+    }
+}
+
+TEST_F(CodebaseScannerTest, ListFilesRespectsMaxResults) {
+    cppcoder::CodebaseScanner scanner(root_);
+    auto files = scanner.ListFiles(2);
+    ASSERT_EQ(files.size(), 2u);
+    // Truncation takes a sorted prefix, not an arbitrary two.
+    EXPECT_EQ(files[0], "foo.cpp");
+    EXPECT_EQ(files[1], "sub/bar.h");
+}
+
 }  // namespace

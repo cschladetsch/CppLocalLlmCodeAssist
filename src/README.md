@@ -11,7 +11,7 @@ Builds into one static library, `cppcoder_core`, linked by the
 |---|---|---|
 | `JsonUtil.cpp` | `ExtractJsonObject`/`ExtractJsonArray` | Brace/bracket-depth scanning, no JSON parsing involved (the input isn't guaranteed to be valid JSON yet). |
 | `Logging.cpp` | `InitLogging` | Maps a level name string to spdlog's enum; sets up console + optional file sink. |
-| `CodebaseScanner.cpp` | `CodebaseScanner` | Recursive directory walk, extension filtering, `.git`/`build` exclusion, token-budget-aware truncation. |
+| `CodebaseScanner.cpp` | `CodebaseScanner` | Recursive directory walk, extension filtering, configurable directory exclusion (`.git`/`build` by default; chat mode adds `external`), token-budget-aware truncation, plus a cheap contents-free `ListFiles`. Exclusion matches the path *relative to* the root, so a checkout living under a folder named `build` isn't wholly ignored. |
 | `OllamaClient.cpp` | `OllamaClient` | Synchronous `httplib::Client` calls to `/api/generate` and `/api/tags`. One client per call site; cheap to construct. |
 | `Worker.cpp` | `Worker` | Builds the worker prompt, calls `OllamaClient::Generate`, parses the JSON response (`ParseWorkerResponse`) into a `Finding`. |
 | `Judge.cpp` | `Judge` | Builds the judge prompt, calls the model, applies the response (`ApplyJudgeResponse`) to prune the `Finding`. |
@@ -20,7 +20,8 @@ Builds into one static library, `cppcoder_core`, linked by the
 | `Editor.cpp` | `Editor` | Same shape as `Worker`, but asks the model for full replacement file content instead of a research summary; parses it into an `EditFinding` (`ParseEditResponse`). |
 | `PatchApplier.cpp` | `PatchApplier` | Writes `ProposedEdit`s to disk, rejecting any path that would resolve outside the codebase root (path-traversal / absolute-path guard). |
 | `EditEngine.cpp` | `EditEngine` | Edit-mode's orchestration loop: same keyword-seeded task queue as `ResearchEngine`, but drives `Editor` (no judge step) and either accumulates or applies proposed edits. |
-| `ChatServer.cpp` | `ChatServer` | httplib **server**: static file serving, `/api/models`, `/api/memory` (GET/POST/DELETE), `/api/chat` (streaming proxy to Ollama). Resolves the local-command root once in `Run()`. |
+| `ChatServer.cpp` | `ChatServer` | httplib **server**: static file serving, `/api/models`, `/api/memory` (GET/POST/DELETE), `/api/chat` (streaming proxy to Ollama). Resolves the local-command root once in `Run()`; `BuildFileContext` drives the retrieval pre-pass. |
+| `FileRetriever.cpp` | `FindLikelyFiles`, `BuildRetrievalPrompt`, `ParseFileRequests`, `ReadRequestedFiles`, `FormatFileContext` | Chat mode's retrieval pre-pass: grep-ranks candidate files by message terms, asks the model which it needs, reads them under the same root guard as `/read`, and formats them as a system message. |
 | `LocalCommands.cpp` | `FindRepoRoot`, `TryHandleLocalCommand` | The `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer` answers itself, plus the walk-up-for-`.git` search that picks the root they're confined to. Takes the root as a parameter so it's testable against a temp directory. |
 | `MemoryStore.cpp` | `MemoryStore` | JSON read/write of the facts file, mutex-guarded, case-insensitive dedup. |
 | `FactExtractor.cpp` | `ExtractFacts` | The regex pattern table -- see comments there before adding a new phrasing. |
@@ -46,6 +47,7 @@ flowchart TD
         MemoryStore.cpp
         FactExtractor.cpp
         LocalCommands.cpp
+        FileRetriever.cpp
     end
 
     lib -->|PUBLIC| NJ[("nlohmann_json")]
