@@ -54,8 +54,13 @@ function Write-Step {
 
 if (-not $SkipBuild) {
     Write-Step 'Building cppcoder (delegating to t.ps1)'
-    $buildArgs = @('-SkipTests')
-    if ($Clean) { $buildArgs += '-Clean' }
+    # Hashtable splat, not array splat: array splatting binds positionally
+    # (switches are excluded from position numbering, so a bare
+    # '-SkipTests' string would land on t.ps1's first non-switch
+    # parameter, $Jobs, and fail its int conversion). Only hashtable
+    # splatting binds by parameter name.
+    $buildArgs = @{ SkipTests = $true }
+    if ($Clean) { $buildArgs['Clean'] = $true }
     & (Join-Path $PSScriptRoot 't.ps1') @buildArgs
     if ($LASTEXITCODE -ne 0) { throw 't.ps1 build failed' }
 }
