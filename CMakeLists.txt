@@ -9,6 +9,14 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+# /FS: force synchronous PDB writes. Without it, ninja's parallel TU
+# compilation races multiple cl/clang-cl processes against the same
+# target's .pdb (all TUs in a target share one under /Zi), which can
+# crash the compiler frontend outright rather than just erroring.
+if(MSVC)
+    add_compile_options(/FS)
+endif()
+
 # This project is consumed as a git submodule or built standalone; it is
 # never `cmake --install`'d. Without this, CMake's Generate step fails
 # whenever a dependency ends up being an in-tree FetchContent target
@@ -60,6 +68,19 @@ FetchContent_Declare(
 )
 set(HTTPLIB_REQUIRE_OPENSSL OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(httplib)
+
+# rang -- single-header terminal colors for ChatCli, auto-detecting
+# whether stdout is a real terminal and enabling Windows' ANSI virtual
+# terminal processing itself, so no hand-rolled escape-code/SetConsoleMode
+# handling is needed at the call site.
+FetchContent_Declare(
+    rang
+    GIT_REPOSITORY https://github.com/agauniyal/rang.git
+    GIT_TAG v3.2
+    GIT_SHALLOW TRUE
+    UPDATE_DISCONNECTED TRUE
+)
+FetchContent_MakeAvailable(rang)
 
 find_package(Threads REQUIRED)
 
