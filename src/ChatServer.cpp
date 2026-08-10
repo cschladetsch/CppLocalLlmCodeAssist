@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -34,6 +36,19 @@ bool WriteNdjsonError(httplib::DataSink& sink, const std::string& message) {
     nlohmann::json err{{"error", message}};
     std::string line = err.dump() + "\n";
     return sink.write(line.data(), line.size());
+}
+
+// Best-effort launch of the user's default browser at `url`. Failure is
+// silent -- the server is up regardless, just log the URL so the user
+// can open it themselves.
+void OpenBrowser(const std::string& url) {
+#ifdef _WIN32
+    std::system(("start \"\" \"" + url + "\"").c_str());
+#elif defined(__APPLE__)
+    std::system(("open \"" + url + "\" >/dev/null 2>&1").c_str());
+#else
+    std::system(("xdg-open \"" + url + "\" >/dev/null 2>&1 &").c_str());
+#endif
 }
 
 struct HardwareInfo {
@@ -171,6 +186,27 @@ int ChatServer::Run() {
                 "ChatServer: could not mount web root '{}' -- static UI won't be served",
                 config_.webRoot);
         }
+
+        // cpp-httplib's static file handler resolves "/" to "index.html",
+        // which here is the offline task-graph *visualizer* (no chat
+        // input) rather than the chat UI -- see web/README.md. Serve
+        // chat.html at "/" instead; index.html and chat.html both remain
+        // reachable at their own paths for anyone who wants the demo.
+        const std::filesystem::path chatHtmlPath =
+            std::filesystem::path(config_.webRoot) / "chat.html";
+        svr.set_pre_routing_handler(
+            [chatHtmlPath](const httplib::Request& req, httplib::Response& res) {
+                if (req.path == "/") {
+                    std::ifstream file(chatHtmlPath, std::ios::binary);
+                    if (file) {
+                        std::ostringstream contents;
+                        contents << file.rdbuf();
+                        res.set_content(contents.str(), "text/html; charset=utf-8");
+                        return httplib::Server::HandlerResponse::Handled;
+                    }
+                }
+                return httplib::Server::HandlerResponse::Unhandled;
+            });
     }
 
     // GET /api/models -- model tags Ollama currently has pulled locally,
@@ -495,14 +531,25 @@ int ChatServer::Run() {
             });
     });
 
-    spdlog::info("Chat server listening on http://{}:{} (web root: {})", config_.bindHost,
-                 config_.bindPort, config_.webRoot.empty() ? "<none>" : config_.webRoot);
+    if (!svr.bind_to_port(config_.bindHost, config_.bindPort)) {
+        spdlog::error("ChatServer: failed to bind {}:{}", config_.bindHost, config_.bindPort);
+        return 1;
+    }
+
+    const std::string url = "http://" + config_.bindHost + ":" + std::to_string(config_.bindPort) + "/";
+    spdlog::info("Chat server listening on {} (web root: {})", url,
+                 config_.webRoot.empty() ? "<none>" : config_.webRoot);
     spdlog::info("Ollama backend: {}:{}, default model: {}", config_.ollamaHost,
                  config_.ollamaPort, config_.defaultModel);
     spdlog::info("Press Ctrl+C to stop.");
 
-    if (!svr.listen(config_.bindHost, config_.bindPort)) {
-        spdlog::error("ChatServer: failed to bind {}:{}", config_.bindHost, config_.bindPort);
+    if (config_.openBrowser && !config_.webRoot.empty()) {
+        OpenBrowser(url);
+    }
+
+    if (!svr.listen_after_bind()) {
+        spdlog::error("ChatServer: listen loop failed for {}:{}", config_.bindHost,
+                      config_.bindPort);
         return 1;
     }
     return 0;

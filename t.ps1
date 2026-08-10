@@ -14,7 +14,11 @@
     Skip running ctest after building.
 
 .PARAMETER Jobs
-    Parallel build jobs. Defaults to the processor count.
+    Parallel build jobs. Defaults to the processor count, capped to
+    roughly one job per 2GB of RAM when building with clang/clang-cl
+    (heavy template instantiation against the MSVC STL can OOM-crash
+    individual compiler processes at full parallelism on a from-scratch
+    build otherwise). Pass explicitly to override the cap.
 
 .PARAMETER Compiler
     Which compiler/generator to configure with:
@@ -44,7 +48,9 @@
     repo's root.
 
 .PARAMETER Model
-    Ollama model tag passed to cppcoder. Defaults to qwen2.5-coder:7b.
+    Ollama model tag passed to cppcoder via --model. Left unset, cppcoder
+    falls back to its own built-in default -- see kDefaultOllamaModel in
+    include/cppcoder/OllamaClient.h for the single source of truth.
 
 .PARAMETER EventsFile
     Path to write JSON-Lines engine events when -Question or -Task is
@@ -129,7 +135,7 @@ param(
     [string]$Task,
     [switch]$Apply,
     [string]$Codebase = $PSScriptRoot,
-    [string]$Model = 'qwen2.5-coder:7b',
+    [string]$Model,
     [string]$EventsFile,
     [ValidateSet('trace', 'debug', 'info', 'warn', 'err', 'critical', 'off')]
     [string]$LogLevel = 'info',
@@ -176,6 +182,42 @@ function Confirm-NinjaOrWarn {
                    "slower). Install it (e.g. 'winget install Ninja-build.Ninja') for fast " +
                    'incremental builds.')
     return $false
+}
+
+# clang-cl/clang++ instantiating nlohmann::json and spdlog/fmt against
+# the MSVC STL is memory-hungry enough that -j <core count> on a
+# from-scratch build (all deps + the whole project compiling at once)
+# can crash individual clang-cl processes with an access violation --
+# seen in practice on a 24-core/32GB box, a different source file
+# crashing each run, which pointed at memory pressure rather than a
+# real compiler or code bug (confirmed: the same build succeeded at
+# -j 8). Cap the *default* job count to roughly one job per 2GB of
+# RAM; an explicit -Jobs always overrides this.
+function Get-DefaultJobs {
+    param([string]$EffectiveCompiler, [bool]$OnWindows, [bool]$OnMacOS)
+
+    $cores = [Environment]::ProcessorCount
+    if (-not $EffectiveCompiler.StartsWith('clang')) { return $cores }
+
+    $ramGb = 0
+    try {
+        if ($OnWindows) {
+            $ramGb = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory / 1GB
+        }
+        elseif ($OnMacOS) {
+            $ramGb = [int64](sysctl -n hw.memsize) / 1GB
+        }
+        else {
+            $match = Select-String -Path /proc/meminfo -Pattern '^MemTotal:\s+(\d+)' -ErrorAction Stop
+            if ($match) { $ramGb = [int64]$match.Matches[0].Groups[1].Value / 1MB }
+        }
+    }
+    catch {
+        return $cores  # couldn't detect RAM -- fall back to full parallelism
+    }
+
+    if ($ramGb -le 0) { return $cores }
+    return [Math]::Max(1, [Math]::Min($cores, [Math]::Floor($ramGb / 2.0)))
 }
 
 function Import-VisualStudioEnvironment {
@@ -375,7 +417,13 @@ if (-not $SkipBuild) {
     }
 
     if ($Jobs -le 0) {
-        $Jobs = [Environment]::ProcessorCount
+        $cores = [Environment]::ProcessorCount
+        $Jobs = Get-DefaultJobs -EffectiveCompiler $effectiveCompiler -OnWindows $OnWindows -OnMacOS $OnMacOS
+        if ($Jobs -lt $cores) {
+            Write-Step ("Capping default parallelism to -j $Jobs (of $cores cores) to avoid " +
+                        'clang OOM-crashes on a from-scratch build; pass -Jobs explicitly to ' +
+                        'override.')
+        }
     }
     Write-Step "Building (-j $Jobs)"
     cmake --build build -j $Jobs @buildConfigArgs
@@ -427,7 +475,8 @@ if ($Question) {
     }
 
     Write-Step "Researching: $Question"
-    & $exe --question $Question --codebase $Codebase --model $Model `
+    $modelArgs = if ($Model) { @('--model', $Model) } else { @() }
+    & $exe --question $Question --codebase $Codebase @modelArgs `
         --events-file $EventsFile --log-level $LogLevel
     $exitCode = $LASTEXITCODE
 
@@ -449,8 +498,9 @@ if ($Task -and -not $Question) {
 
     $modeLabel = if ($Apply) { 'Applying' } else { 'Proposing (dry-run)' }
     Write-Step "$modeLabel edit: $Task"
-    $editArgs = @('--task', $Task, '--codebase', $Codebase, '--model', $Model,
+    $editArgs = @('--task', $Task, '--codebase', $Codebase,
                   '--events-file', $EventsFile, '--log-level', $LogLevel)
+    if ($Model) { $editArgs += @('--model', $Model) }
     if ($Apply) { $editArgs += '--apply' }
     & $exe @editArgs
     $exitCode = $LASTEXITCODE
@@ -486,7 +536,8 @@ if ($Serve) {
     $chatUrl = "http://${ServeHost}:${ServePort}/chat.html"
 
     Write-Step "Starting chat server at http://${ServeHost}:${ServePort}"
-    Write-Host "  (model: $Model -- switch models from the dropdown once it's up)"
+    $modelLabel = if ($Model) { $Model } else { "cppcoder's default" }
+    Write-Host "  (model: $modelLabel -- switch models from the dropdown once it's up)"
 
     # Open the browser shortly after the server has had a moment to bind,
     # then block in the foreground running the server itself.
@@ -499,8 +550,12 @@ if ($Serve) {
     } -ArgumentList $chatUrl, $OnWindows, $OnMacOS
 
     try {
-        & $exe --serve --serve-host $ServeHost --serve-port $ServePort --model $Model `
-            --log-level $LogLevel
+        $modelArgs = if ($Model) { @('--model', $Model) } else { @() }
+        # --no-open-browser: the $openJob above already opens the browser
+        # for this script's own callers -- without this, cppcoder's own
+        # (newer) auto-open would fire too and pop a second tab.
+        & $exe --serve --serve-host $ServeHost --serve-port $ServePort @modelArgs `
+            --log-level $LogLevel --no-open-browser
     }
     finally {
         Remove-Job -Job $openJob -Force -ErrorAction SilentlyContinue

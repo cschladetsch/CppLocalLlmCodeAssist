@@ -362,6 +362,11 @@
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
+  /* MathJax renders into <mjx-container> elements inside the bubble;
+     let them wrap/scroll like the rest of the message instead of
+     overflowing the fixed-width bubble on long expressions. */
+  .bubble mjx-container { overflow-x: auto; max-width: 100%; }
+
   /* ---------- Pull banner ---------- */
 
   .pull-banner {
@@ -451,6 +456,21 @@
 </div>
 
 <script>
+  // Configured before vendor/mathjax loads, per MathJax's own startup
+  // contract. skipHtmlTags adds pre/code so literal backslash-commands
+  // in fenced code blocks are never mistaken for math.
+  window.MathJax = {
+    tex: {
+      inlineMath: [["\\(", "\\)"]],
+      displayMath: [["\\[", "\\]"], ["$$", "$$"]]
+    },
+    options: {
+      skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+    }
+  };
+</script>
+<script src="./vendor/mathjax/tex-chtml.js" id="MathJax-script" async></script>
+<script>
 (function () {
   "use strict";
 
@@ -465,6 +485,7 @@
   const statusBar = document.getElementById("statusBar");
   const statusText = document.getElementById("statusText");
   const input = document.getElementById("input");
+  const DEFAULT_INPUT_PLACEHOLDER = input.placeholder;
   const btnSend = document.getElementById("btnSend");
   const btnMemory = document.getElementById("btnMemory");
   const memoryPanel = document.getElementById("memoryPanel");
@@ -522,6 +543,18 @@
     return withBlocks.replace(/`([^`\n]+)`/g, "<code>$1</code>");
   }
 
+  // MathJax loads async and typesets in a separate pass from
+  // renderContent() -- calling this only once a message's content is
+  // final avoids typesetting a still-streaming, not-yet-closed \[...\]
+  // as broken/partial math.
+  function typesetMath(el) {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      window.MathJax.typesetPromise([el]).catch(function (e) {
+        console.error("MathJax typeset failed", e);
+      });
+    }
+  }
+
   function renderAll() {
     messagesEl.innerHTML = "";
     if (history.length === 0) {
@@ -532,6 +565,7 @@
       messagesEl.appendChild(makeBubble(m.role, m.content, false));
     }
     scrollToBottom();
+    typesetMath(messagesEl);
   }
 
   function makeBubble(role, content, isError) {
@@ -553,6 +587,30 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  // Surfaces a composer-side problem (no model selected/pulled) as a
+  // bubble in the chat itself rather than only the easy-to-miss status
+  // corner -- doesn't touch `history`/localStorage since it isn't a real
+  // conversation turn.
+  function showComposerError(message) {
+    if (emptyHint.parentNode === messagesEl) messagesEl.removeChild(emptyHint);
+    makeBubble("assistant", message, true);
+    scrollToBottom();
+  }
+
+  // Blocks/unblocks the composer itself (not just the status corner) so
+  // "why isn't typing doing anything" has an answer right where the user
+  // is looking -- a disabled dropdown plus a small status-bar note is
+  // easy to miss and reads as a broken input box rather than "no model
+  // available yet".
+  function setComposerBlocked(reason) {
+    input.disabled = true;
+    input.placeholder = reason;
+  }
+  function setComposerReady() {
+    input.disabled = false;
+    input.placeholder = DEFAULT_INPUT_PLACEHOLDER;
+  }
+
   // Populates the model dropdown with two groups: models already pulled
   // (selectable), and curated suggestions that aren't pulled yet (shown
   // disabled, with size and a fit warning based on detected local
@@ -567,6 +625,7 @@
       if (!res.ok) {
         setStatus("err", data.error || "Ollama unreachable");
         modelSelect.innerHTML = "<option>(no models — Ollama unreachable)</option>";
+        setComposerBlocked("Ollama isn't reachable — start it (`ollama serve`), then click ↻ Refresh above");
         return;
       }
 
@@ -580,7 +639,9 @@
 
       if (models.length === 0) {
         const opt = document.createElement("option");
-        opt.textContent = "(none pulled — try: ollama pull " + (data.default || "qwen2.5-coder:7b") + ")";
+        opt.textContent = data.default
+          ? "(none pulled — try: ollama pull " + data.default + ")"
+          : "(none pulled yet)";
         opt.disabled = true;
         modelSelect.appendChild(opt);
       } else {
@@ -641,14 +702,21 @@
           if (hw.vram_detected) statusMsg += " / " + hw.vram_gb.toFixed(0) + "GB VRAM";
         }
         setStatus(models.length > 0 ? "ok" : "", statusMsg);
+        if (models.length > 0) {
+          setComposerReady();
+        } else {
+          setComposerBlocked("Pick a model above and pull it before chatting");
+        }
       } else {
         setStatus("err", "Ollama reachable, but no models pulled yet");
+        setComposerBlocked("No models pulled yet — pull one above, then click ↻ Refresh");
       }
 
       updatePullBanner();
     } catch (e) {
       setStatus("err", "Could not reach chat server");
       modelSelect.innerHTML = "<option>(server unreachable)</option>";
+      setComposerBlocked("Chat server unreachable — is `sarah --serve` still running?");
     }
   }
 
@@ -868,10 +936,13 @@
     const model = modelSelect.value;
     if (!model || modelSelect.disabled) {
       setStatus("err", "No model selected");
+      showComposerError("No model selected -- " + input.placeholder);
       return;
     }
     if (modelInfo[model] && !modelInfo[model].pulled) {
-      setStatus("err", "Pull " + model + " first (see the banner above)");
+      const message = "Pull " + model + " first (see the banner above)";
+      setStatus("err", message);
+      showComposerError(message);
       return;
     }
 
@@ -929,6 +1000,7 @@
           bubble.classList.add("error");
           bubble.classList.remove("cursor-blink");
           bubble.innerHTML = renderContent(assistantContent);
+          typesetMath(bubble);
           return;
         }
         if (obj.message && typeof obj.message.content === "string") {
@@ -961,6 +1033,7 @@
 
       bubble.classList.remove("cursor-blink");
       bubble.innerHTML = renderContent(assistantContent);
+      typesetMath(bubble);
       if (!sawError) {
         history.push({ role: "assistant", content: assistantContent });
         saveHistory();

@@ -26,6 +26,7 @@ target_link_libraries(cppcoder_core
     PRIVATE
         httplib::httplib
         Threads::Threads
+        rang
 )
 
 add_executable(cppcoder main.cpp)

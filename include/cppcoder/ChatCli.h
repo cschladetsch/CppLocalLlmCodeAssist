@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cppcoder/MemoryStore.h"
+#include "cppcoder/OllamaClient.h"
 
 #include <string>
 
@@ -8,10 +9,10 @@ namespace cppcoder {
 
 struct ChatCliConfig {
     // Ollama connection used to service the chat turn and the retrieval
-    // pre-pass.
-    std::string ollamaHost = "localhost";
+    // pre-pass. "127.0.0.1" not "localhost" -- see OllamaClient.h for why.
+    std::string ollamaHost = "127.0.0.1";
     int ollamaPort = 11434;
-    std::string model = "qwen2.5-coder:7b";
+    std::string model = kDefaultOllamaModel;
 
     // Path to the persisted facts file (see MemoryStore). Empty means
     // "use MemoryStore::ResolveDefaultPath()".

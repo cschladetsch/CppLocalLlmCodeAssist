@@ -311,7 +311,7 @@ provided instead of vendoring a second copy.
 ## Run: research mode
 
 ```
-ollama pull qwen2.5-coder:7b
+ollama pull qwen2.5-coder:1.5b
 ./build/src/cppcoder --question "How does X work?" --codebase /path/to/repo
 ```
 
@@ -319,7 +319,7 @@ ollama pull qwen2.5-coder:7b
 |---|---|---|
 | `--question <text>` | *(required)* | Question to research |
 | `--codebase <path>` | *(required)* | Root of the codebase to investigate |
-| `--model <name>` | `qwen2.5-coder:7b` | Ollama model tag |
+| `--model <name>` | `qwen2.5-coder:1.5b` | Ollama model tag |
 | `--host <host>` | `localhost` | Ollama host |
 | `--port <port>` | `11434` | Ollama port |
 | `--max-minutes <n>` | `90` | Wall-clock budget |
@@ -332,7 +332,7 @@ ollama pull qwen2.5-coder:7b
 ## Edit mode
 
 ```
-ollama pull qwen2.5-coder:7b
+ollama pull qwen2.5-coder:1.5b
 ./build/src/cppcoder --task "Add a doc comment to Frobnicate()" --codebase /path/to/repo
 ./build/src/cppcoder --task "Add a doc comment to Frobnicate()" --codebase /path/to/repo --apply
 ```
@@ -413,7 +413,7 @@ panel to view, add, or forget facts by hand (`GET`/`POST`/`DELETE
 | `--web-root <path>` | auto-detect `./web` | Directory to serve as the chat UI |
 | `--memory-file <path>` | `~/.models/memory.json` | Facts file to persist/read |
 | `--no-file-context` | *(pre-pass on)* | Disable the retrieval pre-pass described below |
-| `--model <name>` | `qwen2.5-coder:7b` | Default Ollama model tag (switchable per-conversation from the UI) |
+| `--model <name>` | `qwen2.5-coder:1.5b` | Default Ollama model tag (switchable per-conversation from the UI) |
 | `--host` / `--port` | `localhost` / `11434` | Ollama connection used to service `/api/models` and `/api/chat` |
 
 See [web/README.md](web/README.md) for the frontend side of this.
@@ -526,7 +526,7 @@ with `/exit`, `/quit`, or EOF (Ctrl+D / Ctrl+Z).
 | `--cli` | *(off)* | Start the interactive terminal chat session instead of researching |
 | `--memory-file <path>` | `~/.models/memory.json` | Facts file to persist/read |
 | `--no-file-context` | *(pre-pass on)* | Disable the retrieval pre-pass |
-| `--model <name>` | `qwen2.5-coder:7b` | Ollama model tag |
+| `--model <name>` | `qwen2.5-coder:1.5b` | Ollama model tag |
 | `--host` / `--port` | `localhost` / `11434` | Ollama connection |
 
 ## Logging

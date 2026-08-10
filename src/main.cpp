@@ -15,6 +15,11 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -43,6 +48,7 @@ void PrintUsage(const char* argv0) {
         << "  --serve-port <port>      Port to bind the chat server to (default: 8765)\n"
         << "  --web-root <path>        Directory to serve as the chat UI (default: auto-detect ./web)\n"
         << "  --memory-file <path>     Facts file to persist/read (default: ~/.models/memory.json)\n"
+        << "  --no-open-browser        Don't open the chat UI in a browser once the server is up\n"
         << "\n"
         << "Interactive CLI mode options:\n"
         << "  --cli                    Start an interactive terminal chat session (\"Claude Code\"-style)\n"
@@ -50,8 +56,9 @@ void PrintUsage(const char* argv0) {
         << "  --no-file-context        Disable the retrieval pre-pass (repository-aware answers)\n"
         << "\n"
         << "Shared Ollama options:\n"
-        << "  --model <name>           Ollama model tag (default: qwen2.5-coder:7b)\n"
-        << "  --host <host>            Ollama host (default: localhost)\n"
+        << "  --model <name>           Ollama model tag (default: " << cppcoder::kDefaultOllamaModel
+        << ")\n"
+        << "  --host <host>            Ollama host (default: 127.0.0.1)\n"
         << "  --port <port>            Ollama port (default: 11434)\n"
         << "\n"
         << "Logging options:\n"
@@ -85,6 +92,62 @@ std::string ResolveDefaultWebRoot(const char* argv0) {
     return {};
 }
 
+// Best-effort, non-blocking launch of `ollama serve`. Returns true if the
+// process was started -- not that it's ready yet; caller polls for that.
+bool LaunchOllamaServe() {
+#ifdef _WIN32
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    char cmd[] = "ollama serve";
+    BOOL ok = CreateProcessA(nullptr, cmd, nullptr, nullptr, FALSE,
+                              CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW | DETACHED_PROCESS,
+                              nullptr, nullptr, &si, &pi);
+    if (ok) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+    return ok != 0;
+#else
+    return std::system("ollama serve >/dev/null 2>&1 &") == 0;
+#endif
+}
+
+// If configured to talk to a local Ollama and it's not already up, start
+// `ollama serve` and wait (briefly) for it to become reachable. No-op for
+// a non-local host -- that's someone else's server to manage.
+void EnsureOllamaRunning(const cppcoder::OllamaConfig& ollamaConfig) {
+    if (ollamaConfig.host != "localhost" && ollamaConfig.host != "127.0.0.1") {
+        return;
+    }
+
+    cppcoder::OllamaClient probe(ollamaConfig);
+    if (probe.IsServerReachable()) {
+        return;
+    }
+
+    spdlog::info("Ollama not reachable at {}:{} -- starting `ollama serve`...",
+                 ollamaConfig.host, ollamaConfig.port);
+    if (!LaunchOllamaServe()) {
+        spdlog::warn(
+            "Could not start `ollama serve` automatically (is Ollama installed and on PATH?). "
+            "Start it manually and retry.");
+        return;
+    }
+
+    constexpr int kMaxAttempts = 20;
+    constexpr auto kPollInterval = std::chrono::milliseconds(500);
+    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        std::this_thread::sleep_for(kPollInterval);
+        if (probe.IsServerReachable()) {
+            spdlog::info("Ollama is up.");
+            return;
+        }
+    }
+    spdlog::warn("Ollama did not become reachable within {}s; continuing anyway.",
+                 kMaxAttempts * kPollInterval.count() / 1000);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -105,6 +168,7 @@ int main(int argc, char** argv) {
     std::string webRoot;
     std::string memoryFilePath;
     bool fileContextEnabled = true;
+    bool openBrowser = true;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -150,6 +214,8 @@ int main(int argc, char** argv) {
             webRoot = next("--web-root");
         } else if (arg == "--memory-file") {
             memoryFilePath = next("--memory-file");
+        } else if (arg == "--no-open-browser") {
+            openBrowser = false;
         } else if (arg == "--no-file-context") {
             fileContextEnabled = false;
         } else if (arg == "--log-level") {
@@ -169,6 +235,8 @@ int main(int argc, char** argv) {
     cppcoder::InitLogging(logLevel, logFilePath);
 
     if (serveMode) {
+        EnsureOllamaRunning(ollamaConfig);
+
         cppcoder::ChatServerConfig serverConfig;
         serverConfig.bindHost = serveHost;
         serverConfig.bindPort = servePort;
@@ -178,6 +246,7 @@ int main(int argc, char** argv) {
         serverConfig.webRoot = webRoot.empty() ? ResolveDefaultWebRoot(argv[0]) : webRoot;
         serverConfig.memoryFilePath = memoryFilePath;
         serverConfig.fileContextEnabled = fileContextEnabled;
+        serverConfig.openBrowser = openBrowser;
 
         if (serverConfig.webRoot.empty()) {
             spdlog::warn(
@@ -190,6 +259,8 @@ int main(int argc, char** argv) {
     }
 
     if (cliMode) {
+        EnsureOllamaRunning(ollamaConfig);
+
         cppcoder::ChatCliConfig cliConfig;
         cliConfig.ollamaHost = ollamaConfig.host;
         cliConfig.ollamaPort = ollamaConfig.port;

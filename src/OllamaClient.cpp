@@ -71,6 +71,13 @@ bool OllamaClient::IsModelAvailable() const {
     return false;
 }
 
+bool OllamaClient::IsServerReachable() const {
+    httplib::Client cli(config_.host, config_.port);
+    cli.set_connection_timeout(2, 0);
+    auto res = cli.Get("/api/tags");
+    return res && res->status == 200;
+}
+
 std::vector<std::string> OllamaClient::ListModels() const {
     httplib::Client cli(config_.host, config_.port);
     cli.set_connection_timeout(5, 0);

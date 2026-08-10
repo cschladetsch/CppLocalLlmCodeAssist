@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cppcoder/MemoryStore.h"
+#include "cppcoder/OllamaClient.h"
 
 #include <string>
 
@@ -12,9 +13,10 @@ struct ChatServerConfig {
     int bindPort = 8765;
 
     // Ollama connection used to service /api/models and /api/chat.
-    std::string ollamaHost = "localhost";
+    // "127.0.0.1" not "localhost" -- see OllamaClient.h for why.
+    std::string ollamaHost = "127.0.0.1";
     int ollamaPort = 11434;
-    std::string defaultModel = "qwen2.5-coder:7b";
+    std::string defaultModel = kDefaultOllamaModel;
 
     // Directory containing chat.html (and friends) to serve as static
     // files at "/". Resolved by main.cpp before construction.
@@ -29,6 +31,10 @@ struct ChatServerConfig {
     // extra non-streaming model round trip per chat turn, so it's worth
     // turning off for pure conversational use on slow hardware.
     bool fileContextEnabled = true;
+
+    // Whether to open the chat UI in the default browser once the server
+    // is ready to accept connections.
+    bool openBrowser = true;
 };
 
 // Minimal local web server backing the "Claude for Desktop"-style chat

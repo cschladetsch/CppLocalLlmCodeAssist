@@ -10,8 +10,10 @@
 .PARAMETER Clean
     Remove build/ first and do a full rebuild.
 .PARAMETER Model
-    Default Ollama model tag selected in the chat UI. Defaults to
-    qwen2.5-coder:7b. You can still switch models from the dropdown once
+    Default Ollama model tag selected in the chat UI. Left unset,
+    cppcoder falls back to its own built-in default -- see
+    kDefaultOllamaModel in include/cppcoder/OllamaClient.h for the single
+    source of truth. You can still switch models from the dropdown once
     the page is open.
 .PARAMETER ServeHost
     Address to bind the chat server to. Defaults to 127.0.0.1.
@@ -33,7 +35,7 @@
 param(
     [switch]$SkipBuild,
     [switch]$Clean,
-    [string]$Model = 'qwen2.5-coder:7b',
+    [string]$Model,
     [string]$ServeHost = '127.0.0.1',
     [int]$ServePort = 8765,
     [switch]$SkipModelCheck
@@ -69,7 +71,9 @@ if (-not $ollamaUp) {
     Write-Host "Ollama already running." -ForegroundColor Green
 }
 
-if (-not $SkipModelCheck) {
+if (-not $SkipModelCheck -and -not $Model) {
+    Write-Host "No -Model given -- skipping the pull check; cppcoder will use its own default." -ForegroundColor Cyan
+} elseif (-not $SkipModelCheck) {
     Write-Host "Checking Ollama has '$Model' pulled..." -ForegroundColor Cyan
     try {
         $pulled = & ollama list 2>$null
@@ -90,10 +94,11 @@ if (-not $SkipModelCheck) {
     }
 }
 
+$modelArgs = if ($Model) { @{ Model = $Model } } else { @{} }
 & (Join-Path $PSScriptRoot 't.ps1') `
     -Serve `
     -SkipBuild:$SkipBuild `
     -Clean:$Clean `
-    -Model $Model `
+    @modelArgs `
     -ServeHost $ServeHost `
     -ServePort $ServePort

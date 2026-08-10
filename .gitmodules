@@ -10,3 +10,6 @@
 [submodule "external/CppProlog"]
 	path = external/CppProlog
 	url = https://github.com/cschladetsch/CppProlog.git
+[submodule "web/vendor/mathjax"]
+	path = web/vendor/mathjax
+	url = https://github.com/mathjax/MathJax.git
