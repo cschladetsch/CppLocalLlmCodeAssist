@@ -226,10 +226,12 @@ function Import-VisualStudioEnvironment {
 }
 
 # ---------------------------------------------------------------------------
-# 1. Submodules (external/CppLmmModelStore, external/spdlog, external/googletest)
+# 1. Submodules (external/CppLmmModelStore, external/spdlog,
+#    external/googletest, external/CppProlog)
 # ---------------------------------------------------------------------------
 if (-not $SkipBuild -and (Test-Path (Join-Path $PSScriptRoot '.gitmodules'))) {
-    $submodulePaths = @('external/CppLmmModelStore', 'external/spdlog', 'external/googletest')
+    $submodulePaths = @('external/CppLmmModelStore', 'external/spdlog', 'external/googletest',
+                         'external/CppProlog')
     $needsInit = $false
     foreach ($dir in $submodulePaths) {
         $marker = Join-Path (Join-Path $PSScriptRoot $dir) 'CMakeLists.txt'

@@ -93,6 +93,13 @@ set(MODELSTORE_BUILD_TESTS ${BUILD_TESTS} CACHE BOOL "" FORCE)
 set(MODELSTORE_ALLOW_FETCHCONTENT OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/CppLmmModelStore)
 
+# external/CppProlog (https://github.com/cschladetsch/CppProlog) is
+# vendored as a submodule for an upcoming feature but deliberately not
+# add_subdirectory()'d yet -- nothing in this tree depends on it, and its
+# own CMakeLists.txt pulls in a separate dependency set (see its
+# .gitmodules) that isn't worth configuring until something actually
+# links against it.
+
 add_subdirectory(src)
 
 if(BUILD_EXAMPLES)

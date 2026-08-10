@@ -232,7 +232,7 @@ CppCoder/
 ├── tests/                205 GoogleTest cases -- see tests/README.md
 ├── examples/             replay_demo, minimal_usage -- see examples/README.md
 ├── web/                  index.html + chat.html -- see web/README.md
-└── external/             git submodules: CppLmmModelStore, spdlog, googletest
+└── external/             git submodules: CppLmmModelStore, spdlog, googletest, CppProlog
 ```
 
 ## Quick start
@@ -288,8 +288,8 @@ All dependencies are handled automatically: `nlohmann_json` and
 `cpp-httplib` are fetched via CMake FetchContent if not already present
 on the system (`find_package` is tried first, so an existing
 `nlohmann-json3-dev`/vcpkg/conan install is used instead of re-fetching).
-`external/CppLmmModelStore`, `external/googletest`, and `external/spdlog`
-are git submodules:
+`external/CppLmmModelStore`, `external/googletest`, `external/spdlog`,
+and `external/CppProlog` are git submodules:
 
 ```
 git submodule update --init --recursive
@@ -300,6 +300,7 @@ git submodule update --init --recursive
 | `external/CppLmmModelStore` | Shared local-model path resolution (zero-duplication convention used across this author's other projects) |
 | `external/spdlog` | All runtime logging, in this project and in CppLmmModelStore |
 | `external/googletest` | Test suite, shared between `tests/` and CppLmmModelStore's own tests |
+| `external/CppProlog` | [cschladetsch/CppProlog](https://github.com/cschladetsch/CppProlog), a C++23 Prolog interpreter -- vendored for an upcoming feature. Not yet `add_subdirectory()`'d or linked into any target. |
 
 `spdlog` and `googletest` are each added to the CMake project exactly
 once, before `external/CppLmmModelStore`; the submodule's own
