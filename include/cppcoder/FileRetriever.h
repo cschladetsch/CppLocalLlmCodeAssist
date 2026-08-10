@@ -101,4 +101,20 @@ std::vector<RetrievedFile> ReadRequestedFiles(const std::vector<std::string>& pa
 // caller treats as "inject nothing".
 std::string FormatFileContext(const std::vector<RetrievedFile>& files);
 
+// The full retrieval pre-pass, end to end: greps `root` for files that
+// mention a term from `userMessage` (FindLikelyFiles), asks `model` (via
+// the given Ollama connection) which of those it actually needs, reads
+// them, and formats the result as a system-message string ready to
+// prepend to the conversation.
+//
+// Shared by ChatServer (HTTP) and ChatCli (terminal) so the two entry
+// points answer file-aware questions identically. Best-effort throughout
+// and never throws: an empty shortlist, an unreachable Ollama, an
+// unparseable planner reply, or nothing readable all collapse to an
+// empty string, which callers treat as "answer without file context"
+// rather than failing the turn.
+std::string RunRetrievalPrePass(const std::string& userMessage, const std::string& model,
+                                 const std::string& ollamaHost, int ollamaPort,
+                                 const std::filesystem::path& root);
+
 }  // namespace cppcoder

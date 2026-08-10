@@ -2,7 +2,6 @@
 
 #include "cppcoder/MemoryStore.h"
 
-#include <filesystem>
 #include <string>
 
 namespace cppcoder {
@@ -50,14 +49,6 @@ public:
     int Run();
 
 private:
-    // Runs the retrieval pre-pass for one user message and returns the
-    // system message to inject, or an empty string for "no context" --
-    // which covers the model asking for nothing, Ollama being
-    // unreachable, an unparseable reply, and every requested path being
-    // unreadable. Never throws; a failed pre-pass must not fail the turn.
-    std::string BuildFileContext(const std::string& userMessage, const std::string& model,
-                                  const std::filesystem::path& root) const;
-
     ChatServerConfig config_;
     MemoryStore memory_;
 };

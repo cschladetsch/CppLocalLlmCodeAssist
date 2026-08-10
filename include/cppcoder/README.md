@@ -8,10 +8,12 @@ in the `external/CppLmmModelStore` submodule and is included directly as
 Three roughly independent groups of headers live here: the **research
 engine** (question in, answer out, no HTTP server involved), the **edit
 engine** (task in, files changed on disk, mirrors the research engine's
-shape but writes instead of just reading), and the **chat server** (a
-small local web app on top of the same `OllamaClient`). `main.cpp` is
-the only thing that wires all three to a CLI flag (`--question` vs
-`--task` vs `--serve`).
+shape but writes instead of just reading), and **chat** (`ChatServer`, a
+small local web app, and `ChatCli`, its terminal counterpart, both on top
+of the same `OllamaClient` and the same turn logic in
+`FileRetriever.h`/`LocalCommands.h`/`FactExtractor.h`/`MemoryStore.h`).
+`main.cpp` is the only thing that wires all of these to a CLI flag
+(`--question` vs `--task` vs `--serve` vs `--cli`).
 
 ## Research engine headers
 
@@ -40,10 +42,11 @@ the only thing that wires all three to a CLI flag (`--question` vs
 | Header | Purpose |
 |---|---|
 | `ChatServer.h` | Local HTTP server (cpp-httplib) serving `web/chat.html` and proxying `/api/chat` straight through to Ollama, streaming NDJSON back. Owns a `MemoryStore`. |
+| `ChatCli.h` | Terminal counterpart to `ChatServer`: a stdin/stdout read-eval-print loop over the same Ollama `/api/chat` endpoint, same turn logic, no HTTP server. Also owns a `MemoryStore`. |
 | `MemoryStore.h` | Thread-safe persisted fact list (`~/.models/memory.json` by default) with case-insensitive dedup on add. |
 | `FactExtractor.h` | `ExtractFacts(message)` -- regex heuristics that pull durable facts ("my name is...", "I am NN yo") out of a single chat message. |
-| `FileRetriever.h` | The retrieval pre-pass that gives the assistant repository access: `FindLikelyFiles` (grep-rank candidates), `BuildRetrievalPrompt`, `ParseFileRequests`, `ReadRequestedFiles` (root-confined, budgeted), `FormatFileContext`. Pure apart from the file reads, so it's testable without Ollama. |
-| `LocalCommands.h` | `TryHandleLocalCommand(message, root)` -- the `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer` answers itself instead of forwarding to Ollama, confined to `root`. Plus `FindRepoRoot(start)`, the walk-up-for-`.git` search `ChatServer` uses to pick that root. |
+| `FileRetriever.h` | The retrieval pre-pass that gives the assistant repository access: `FindLikelyFiles` (grep-rank candidates), `BuildRetrievalPrompt`, `ParseFileRequests`, `ReadRequestedFiles` (root-confined, budgeted), `FormatFileContext`, and `RunRetrievalPrePass` (wires the pipeline together end to end -- the single entry point `ChatServer` and `ChatCli` both call). Pure apart from the file reads and the planner model call, so the pieces below `RunRetrievalPrePass` are testable without Ollama. |
+| `LocalCommands.h` | `TryHandleLocalCommand(message, root)` -- the `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer`/`ChatCli` answer themselves instead of forwarding to Ollama, confined to `root`. Plus `FindRepoRoot(start)`, the walk-up-for-`.git` search both use to pick that root. |
 
 ## Class diagram
 
@@ -181,6 +184,16 @@ classDiagram
     class ChatServer {
         +int Run()
     }
+    class ChatCliConfig {
+        +string ollamaHost
+        +int ollamaPort
+        +string model
+        +string memoryFilePath
+        +bool fileContextEnabled
+    }
+    class ChatCli {
+        +int Run()
+    }
     class MemoryStore {
         +string[] AllFacts()
         +bool AddFact(string)
@@ -194,6 +207,9 @@ classDiagram
     ChatServer --> ChatServerConfig
     ChatServer --> MemoryStore
     ChatServer ..> FactExtractor : ExtractFacts()
+    ChatCli --> ChatCliConfig
+    ChatCli --> MemoryStore
+    ChatCli ..> FactExtractor : ExtractFacts()
     class RetrievedFile {
         +string path
         +string content
@@ -202,9 +218,12 @@ classDiagram
         +string error
     }
     ChatServer ..> LocalCommandResult : TryHandleLocalCommand(msg, FindRepoRoot(cwd))
-    ChatServer ..> RetrievedFile : BuildFileContext()
+    ChatCli ..> LocalCommandResult : TryHandleLocalCommand(msg, FindRepoRoot(cwd))
+    ChatServer ..> RetrievedFile : RunRetrievalPrePass()
+    ChatCli ..> RetrievedFile : RunRetrievalPrePass()
     RetrievedFile ..> CodebaseScanner : FindLikelyFiles()
     ChatServer --> OllamaClient : proxies to
+    ChatCli --> OllamaClient : streams via httplib::Client
 ```
 
 ## Conventions worth knowing
@@ -234,5 +253,6 @@ classDiagram
   a much harder failure mode to detect than a full-file write.
 - **Header include weight.** `ResearchEngine.h` pulls in every other
   research-engine header; `EditEngine.h` pulls in `Editor.h`/`PatchApplier.h`
-  the same way; `ChatServer.h` only needs `MemoryStore.h`. There's no
-  header that depends on more than one group except `main.cpp` itself.
+  the same way; `ChatServer.h` and `ChatCli.h` each only need
+  `MemoryStore.h`. There's no header that depends on more than one group
+  except `main.cpp` itself.

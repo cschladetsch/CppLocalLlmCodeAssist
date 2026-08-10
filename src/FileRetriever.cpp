@@ -2,6 +2,7 @@
 
 #include "cppcoder/JsonUtil.h"
 #include "cppcoder/LocalCommands.h"
+#include "cppcoder/OllamaClient.h"
 #include "cppcoder/ResearchEngine.h"
 
 #include <nlohmann/json.hpp>
@@ -226,6 +227,73 @@ std::string FormatFileContext(const std::vector<RetrievedFile>& files) {
         out << "\nRequested but unavailable:\n" << failures.str();
     }
     return out.str();
+}
+
+std::string RunRetrievalPrePass(const std::string& userMessage, const std::string& model,
+                                 const std::string& ollamaHost, int ollamaPort,
+                                 const fs::path& root) {
+    // "external" on top of the usual exclusions: vendored submodules are
+    // 87% of this repo's source files by count, and a menu dominated by
+    // googletest and spdlog headers both bloats the planner prompt and
+    // makes the model's choice materially worse.
+    CodebaseScanner scanner(root,
+                             {".cpp", ".h", ".hpp", ".cc", ".cxx", ".py", ".rs", ".scala"},
+                             {".git", "build", "external"});
+    // Content grep first: paths alone are a weak signal for a small
+    // model. If nothing in the tree mentions any term from the message,
+    // the message isn't about this code -- return before spending a
+    // round trip to have the model tell us the same thing. This is what
+    // makes small talk cost nothing.
+    const std::vector<std::string> candidates = FindLikelyFiles(userMessage, scanner);
+    if (candidates.empty()) return {};
+
+    OllamaConfig plannerConfig;
+    plannerConfig.host = ollamaHost;
+    plannerConfig.port = ollamaPort;
+    plannerConfig.model = model;
+    // Picking filenames off a list is a lookup, not a creative task, and
+    // a wrong pick costs a wasted round trip plus wasted context.
+    plannerConfig.temperature = 0.0;
+    // Send no num_ctx, exactly like the streaming proxy that follows.
+    // Ollama reloads the model whenever num_ctx changes, so asking for a
+    // different window here would evict and reload the very model the
+    // main turn is about to use -- twice per message. It also keeps the
+    // pre-pass inside whatever VRAM the model already fits in.
+    plannerConfig.numCtx = 0;
+    // Deliberately shorter than the main turn's budget: the pre-pass is
+    // an optimisation, and the user is waiting on it before any token of
+    // the real answer streams back.
+    plannerConfig.timeoutSeconds = 60;
+
+    OllamaClient planner(plannerConfig);
+    auto reply = planner.Generate(BuildRetrievalPrompt(userMessage, candidates));
+    if (!reply) {
+        // OllamaClient has already logged the specific cause (transport
+        // error, HTTP status and body, or unparseable JSON), so don't
+        // guess at one here.
+        spdlog::warn("FileRetriever: retrieval pre-pass failed -- answering without file context");
+        return {};
+    }
+
+    const std::vector<std::string> requested = ParseFileRequests(*reply);
+    if (requested.empty()) return {};
+
+    const std::vector<RetrievedFile> files = ReadRequestedFiles(requested, root);
+    std::string context = FormatFileContext(files);
+    if (context.empty()) {
+        spdlog::info("FileRetriever: retrieval pre-pass requested {} file(s), none readable",
+                     requested.size());
+        return {};
+    }
+
+    for (const auto& f : files) {
+        if (f.ok) {
+            spdlog::info("FileRetriever: retrieved '{}'{}", f.path, f.truncated ? " (truncated)" : "");
+        } else {
+            spdlog::info("FileRetriever: skipped '{}' -- {}", f.path, f.error);
+        }
+    }
+    return context;
 }
 
 }  // namespace cppcoder

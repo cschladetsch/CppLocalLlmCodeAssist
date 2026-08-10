@@ -11,6 +11,7 @@ add_library(cppcoder_core
     PatchApplier.cpp
     EditEngine.cpp
     ChatServer.cpp
+    ChatCli.cpp
     MemoryStore.cpp
     FactExtractor.cpp
     LocalCommands.cpp

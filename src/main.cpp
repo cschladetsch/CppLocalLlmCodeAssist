@@ -1,3 +1,4 @@
+#include "cppcoder/ChatCli.h"
 #include "cppcoder/ChatServer.h"
 #include "cppcoder/CodebaseScanner.h"
 #include "cppcoder/EditEngine.h"
@@ -22,6 +23,7 @@ void PrintUsage(const char* argv0) {
         << "Usage: " << argv0 << " --question \"...\" --codebase <path> [options]\n"
         << "   or: " << argv0 << " --task \"...\" --codebase <path> [--apply] [options]\n"
         << "   or: " << argv0 << " --serve [options]\n"
+        << "   or: " << argv0 << " --cli [options]\n"
         << "\n"
         << "Research mode options:\n"
         << "  --question <text>        Question to research (required unless --serve)\n"
@@ -41,6 +43,11 @@ void PrintUsage(const char* argv0) {
         << "  --serve-port <port>      Port to bind the chat server to (default: 8765)\n"
         << "  --web-root <path>        Directory to serve as the chat UI (default: auto-detect ./web)\n"
         << "  --memory-file <path>     Facts file to persist/read (default: ~/.models/memory.json)\n"
+        << "\n"
+        << "Interactive CLI mode options:\n"
+        << "  --cli                    Start an interactive terminal chat session (\"Claude Code\"-style)\n"
+        << "  --memory-file <path>     Facts file to persist/read (default: ~/.models/memory.json)\n"
+        << "  --no-file-context        Disable the retrieval pre-pass (repository-aware answers)\n"
         << "\n"
         << "Shared Ollama options:\n"
         << "  --model <name>           Ollama model tag (default: qwen2.5-coder:7b)\n"
@@ -92,6 +99,7 @@ int main(int argc, char** argv) {
     cppcoder::EngineConfig engineConfig;
 
     bool serveMode = false;
+    bool cliMode = false;
     std::string serveHost = "127.0.0.1";
     int servePort = 8765;
     std::string webRoot;
@@ -132,6 +140,8 @@ int main(int argc, char** argv) {
             applyEdits = true;
         } else if (arg == "--serve") {
             serveMode = true;
+        } else if (arg == "--cli") {
+            cliMode = true;
         } else if (arg == "--serve-host") {
             serveHost = next("--serve-host");
         } else if (arg == "--serve-port") {
@@ -177,6 +187,18 @@ int main(int argc, char** argv) {
 
         cppcoder::ChatServer server(std::move(serverConfig));
         return server.Run();
+    }
+
+    if (cliMode) {
+        cppcoder::ChatCliConfig cliConfig;
+        cliConfig.ollamaHost = ollamaConfig.host;
+        cliConfig.ollamaPort = ollamaConfig.port;
+        cliConfig.model = ollamaConfig.model;
+        cliConfig.memoryFilePath = memoryFilePath;
+        cliConfig.fileContextEnabled = fileContextEnabled;
+
+        cppcoder::ChatCli cli(std::move(cliConfig));
+        return cli.Run();
     }
 
     if (!task.empty()) {

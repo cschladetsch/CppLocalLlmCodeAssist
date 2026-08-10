@@ -20,12 +20,13 @@ Builds into one static library, `cppcoder_core`, linked by the
 | `Editor.cpp` | `Editor` | Same shape as `Worker`, but asks the model for full replacement file content instead of a research summary; parses it into an `EditFinding` (`ParseEditResponse`). |
 | `PatchApplier.cpp` | `PatchApplier` | Writes `ProposedEdit`s to disk, rejecting any path that would resolve outside the codebase root (path-traversal / absolute-path guard). |
 | `EditEngine.cpp` | `EditEngine` | Edit-mode's orchestration loop: same keyword-seeded task queue as `ResearchEngine`, but drives `Editor` (no judge step) and either accumulates or applies proposed edits. |
-| `ChatServer.cpp` | `ChatServer` | httplib **server**: static file serving, `/api/models`, `/api/memory` (GET/POST/DELETE), `/api/chat` (streaming proxy to Ollama). Resolves the local-command root once in `Run()`; `BuildFileContext` drives the retrieval pre-pass. |
-| `FileRetriever.cpp` | `FindLikelyFiles`, `BuildRetrievalPrompt`, `ParseFileRequests`, `ReadRequestedFiles`, `FormatFileContext` | Chat mode's retrieval pre-pass: grep-ranks candidate files by message terms, asks the model which it needs, reads them under the same root guard as `/read`, and formats them as a system message. |
+| `ChatServer.cpp` | `ChatServer` | httplib **server**: static file serving, `/api/models`, `/api/memory` (GET/POST/DELETE), `/api/chat` (streaming proxy to Ollama). Resolves the local-command root once in `Run()`; calls `FileRetriever`'s `RunRetrievalPrePass` to drive the retrieval pre-pass. |
+| `ChatCli.cpp` | `ChatCli` | Terminal counterpart to `ChatServer`: same turn logic (retrieval pre-pass, remembered facts, local commands), but a stdin/stdout read-eval-print loop instead of an httplib server -- streams `/api/chat` straight to an `httplib::Client`, printing each NDJSON chunk's `message.content` as it arrives. |
+| `FileRetriever.cpp` | `FindLikelyFiles`, `BuildRetrievalPrompt`, `ParseFileRequests`, `ReadRequestedFiles`, `FormatFileContext`, `RunRetrievalPrePass` | Chat mode's retrieval pre-pass: grep-ranks candidate files by message terms, asks the model which it needs, reads them under the same root guard as `/read`, and formats them as a system message. `RunRetrievalPrePass` wires the whole pipeline together and is the entry point both `ChatServer` and `ChatCli` call. |
 | `LocalCommands.cpp` | `FindRepoRoot`, `TryHandleLocalCommand` | The `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer` answers itself, plus the walk-up-for-`.git` search that picks the root they're confined to. Takes the root as a parameter so it's testable against a temp directory. |
 | `MemoryStore.cpp` | `MemoryStore` | JSON read/write of the facts file, mutex-guarded, case-insensitive dedup. |
 | `FactExtractor.cpp` | `ExtractFacts` | The regex pattern table -- see comments there before adding a new phrasing. |
-| `main.cpp` | CLI entry point | Argument parsing, then dispatches to the research loop, the edit loop, or `ChatServer::Run()`. |
+| `main.cpp` | CLI entry point | Argument parsing, then dispatches to the research loop, the edit loop, `ChatServer::Run()`, or `ChatCli::Run()`. |
 
 ## Build targets
 
@@ -44,6 +45,7 @@ flowchart TD
         PatchApplier.cpp
         EditEngine.cpp
         ChatServer.cpp
+        ChatCli.cpp
         MemoryStore.cpp
         FactExtractor.cpp
         LocalCommands.cpp
@@ -68,21 +70,24 @@ has to be PUBLIC here. `httplib` and `Threads` stay `PRIVATE` since
 nothing outside `cppcoder_core`'s own `.cpp` files touches them
 directly.
 
-## Three entry points, one binary
+## Four entry points, one binary
 
-`main.cpp` parses `argv` once and then takes one of three paths, checked
+`main.cpp` parses `argv` once and then takes one of four paths, checked
 in this order:
 
 - `--serve`: builds a `ChatServerConfig` (resolving `--web-root` via
   `ResolveDefaultWebRoot()` if not given explicitly) and calls
   `ChatServer::Run()`, which blocks serving HTTP until Ctrl+C.
+- `--cli`: builds a `ChatCliConfig` and calls `ChatCli::Run()`, which
+  blocks running a stdin/stdout read-eval-print loop until `/exit`,
+  `/quit`, or EOF.
 - `--task` (non-empty): requires `--codebase`, runs
   `EditEngine::Run()`, prints proposed edits (dry-run, the default) or
   the write/reject/error report (`--apply`), exits.
 - Otherwise: requires `--question`/`--codebase`, runs
   `ResearchEngine::Research()`, prints the answer, exits.
 
-There's no shared state between the three paths beyond `OllamaConfig`
+There's no shared state between the four paths beyond `OllamaConfig`
 (host/port/model) -- see `include/cppcoder/README.md` for the header-level
 picture, and the root README's [Edit mode](../README.md#edit-mode) and
 [Chat mode](../README.md#chat-mode) sections for the request-level detail.

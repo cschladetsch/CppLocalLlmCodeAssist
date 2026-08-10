@@ -20,6 +20,11 @@ against a large codebase, in three modes:
 - **Chat mode** (`cppcoder --serve`): a plain, "Claude for Desktop"-style
   web chat UI backed by the same Ollama instance, with swappable models
   and a small persisted-facts memory. See [Chat mode](#chat-mode) below.
+- **CLI chat mode** (`cppcoder --cli`): the terminal counterpart to chat
+  mode -- a "Claude Code"-style interactive REPL against the same Ollama
+  backend, same retrieval pre-pass, remembered facts, and `/pwd` `/ls`
+  `/read` `/write` local commands, without a browser or HTTP server in
+  the loop. See [Chat mode](#chat-mode) below.
 
 Every subfolder has its own README with more detail: [`include/cppcoder/`](include/cppcoder/README.md),
 [`src/`](src/README.md), [`tests/`](tests/README.md), [`examples/`](examples/README.md),
@@ -168,6 +173,7 @@ flowchart TD
         PatchApplier
         EditEngine
         ChatServer
+        ChatCli
         MemoryStore
         FactExtractor
         LocalCommands
@@ -191,15 +197,21 @@ flowchart TD
     ChatServer --> FactExtractor
     ChatServer --> LocalCommands
     ChatServer --> FileRetriever
+    ChatCli --> MemoryStore
+    ChatCli --> FactExtractor
+    ChatCli --> LocalCommands
+    ChatCli --> FileRetriever
     FileRetriever --> CodebaseScanner
     FileRetriever --> LocalCommands
+    FileRetriever --> OllamaClient
     ChatServer --> HTTPLIB[("cpp-httplib (server)")]
+    ChatCli --> HTTPLIB2
     core --> ModelStore
     core --> Spdlog
     core --> NJ[("nlohmann_json")]
     OllamaClient --> HTTPLIB2[("cpp-httplib (client)")]
 
-    CLI["cppcoder (CLI / --serve / --task)"] --> core
+    CLI["cppcoder (CLI / --serve / --cli / --task)"] --> core
     ReplayDemo["replay_demo"] --> NJ
     MinimalUsage["minimal_usage"] --> core
     Tests["cppcoder_tests"] --> core
@@ -495,6 +507,26 @@ would escape: absolute paths are refused outright, and `..` segments and
 symlinks are resolved before the containment check rather than followed
 (the same guard `PatchApplier` applies to the codebase root). See
 [`include/cppcoder/LocalCommands.h`](include/cppcoder/LocalCommands.h).
+
+### CLI chat mode
+
+`cppcoder --cli` starts the same conversation `ChatServer` runs, minus
+the browser and the HTTP server: `ChatCli` reads a line from stdin,
+streams Ollama's `/api/chat` reply to stdout token-by-token, and loops.
+It shares every piece of `ChatServer`'s turn logic rather than
+reimplementing it -- `RunRetrievalPrePass` (`FileRetriever.h`) for
+repository-aware answers, `FactExtractor`/`MemoryStore` for remembered
+facts, and `TryHandleLocalCommand` for `/pwd` `/ls` `/read` `/write` --
+so the two entry points behave identically apart from transport. Exit
+with `/exit`, `/quit`, or EOF (Ctrl+D / Ctrl+Z).
+
+| Option | Default | Description |
+|---|---|---|
+| `--cli` | *(off)* | Start the interactive terminal chat session instead of researching |
+| `--memory-file <path>` | `~/.models/memory.json` | Facts file to persist/read |
+| `--no-file-context` | *(pre-pass on)* | Disable the retrieval pre-pass |
+| `--model <name>` | `qwen2.5-coder:7b` | Ollama model tag |
+| `--host` / `--port` | `localhost` / `11434` | Ollama connection |
 
 ## Logging
 
