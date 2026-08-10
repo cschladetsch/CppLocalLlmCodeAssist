@@ -4,12 +4,14 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 
 namespace fs = std::filesystem;
 
 using cppcoder::FindRepoRoot;
 using cppcoder::LocalCommandResult;
+using cppcoder::ResolveWithinRoot;
 using cppcoder::TryHandleLocalCommand;
 
 namespace {
@@ -310,4 +312,136 @@ TEST_F(FindRepoRootTest, FilesystemRootTerminatesTheWalk) {
     // its own parent on POSIX and empties out on Windows.
     fs::path fsRoot = base_.root_path();
     EXPECT_NO_THROW({ (void)FindRepoRoot(fsRoot); });
+}
+
+// ---------------- ResolveWithinRoot (direct) ----------------
+
+TEST_F(LocalCommandsTest, ResolveWithinRootAcceptsMixedSeparators) {
+#ifdef _WIN32
+    fs::create_directories(root_ / "mixdir" / "inner");
+    WriteFile(root_ / "mixdir" / "inner" / "file.txt", "mixed separators\n");
+    auto resolved = ResolveWithinRoot("mixdir\\inner/file.txt", root_);
+    ASSERT_TRUE(resolved.has_value());
+    EXPECT_EQ(*resolved, fs::weakly_canonical(root_ / "mixdir" / "inner" / "file.txt"));
+#else
+    GTEST_SKIP() << "backslash is not a path separator outside Windows";
+#endif
+}
+
+TEST_F(LocalCommandsTest, ResolveWithinRootDotResolvesToRootItself) {
+    auto resolved = ResolveWithinRoot(".", root_);
+    ASSERT_TRUE(resolved.has_value());
+    EXPECT_EQ(fs::weakly_canonical(*resolved), fs::weakly_canonical(root_));
+}
+
+TEST_F(LocalCommandsTest, ResolveWithinRootEmptyStringResolvesToRootItself) {
+    auto resolved = ResolveWithinRoot("", root_);
+    ASSERT_TRUE(resolved.has_value());
+    EXPECT_EQ(fs::weakly_canonical(*resolved), fs::weakly_canonical(root_));
+}
+
+TEST_F(LocalCommandsTest, ResolveWithinRootAcceptsDeeplyNestedSubpath) {
+    fs::create_directories(root_ / "a" / "b" / "c");
+    WriteFile(root_ / "a" / "b" / "c" / "d.txt", "deep\n");
+    auto resolved = ResolveWithinRoot("a/b/c/d.txt", root_);
+    ASSERT_TRUE(resolved.has_value());
+    EXPECT_EQ(fs::weakly_canonical(*resolved),
+              fs::weakly_canonical(root_ / "a" / "b" / "c" / "d.txt"));
+    EXPECT_TRUE(fs::exists(*resolved));
+}
+
+TEST_F(LocalCommandsTest, ResolveWithinRootRejectsSymlinkPointingOutsideRoot) {
+    fs::path outsideDir = fs::temp_directory_path() / "cppcoder_local_commands_test_outside";
+    fs::remove_all(outsideDir);
+    fs::create_directories(outsideDir);
+    WriteFile(outsideDir / "secret.txt", "should not be reachable\n");
+
+    fs::path linkPath = root_ / "escape_link";
+    std::error_code ec;
+    fs::create_directory_symlink(outsideDir, linkPath, ec);
+    if (ec) {
+        fs::remove_all(outsideDir);
+        GTEST_SKIP() << "creating symlinks requires elevated privileges on this system: "
+                     << ec.message();
+    }
+
+    auto resolved = ResolveWithinRoot("escape_link/secret.txt", root_);
+    EXPECT_FALSE(resolved.has_value());
+
+    fs::remove_all(outsideDir);
+}
+
+// ---------------- /ls format and edge cases ----------------
+
+TEST_F(LocalCommandsTest, LsOnNonexistentPathReportsError) {
+    LocalCommandResult r = TryHandleLocalCommand("/ls no_such_dir", root_);
+    EXPECT_TRUE(r.handled);
+    EXPECT_NE(r.text.find("not a directory"), std::string::npos);
+}
+
+TEST_F(LocalCommandsTest, LsCommandWithTrailingWhitespaceStillRecognized) {
+    LocalCommandResult r = TryHandleLocalCommand("/ls   ", root_);
+    EXPECT_TRUE(r.handled);
+    EXPECT_NE(r.text.find("notes.txt"), std::string::npos);
+    EXPECT_NE(r.text.find("sub/"), std::string::npos);
+}
+
+TEST_F(LocalCommandsTest, LsOutputFormatIsSortedIndentedWithHeaderLine) {
+    LocalCommandResult r = TryHandleLocalCommand("/ls", root_);
+    EXPECT_TRUE(r.handled);
+    std::string expected = root_.string() + ":\n  notes.txt\n  sub/\n";
+    EXPECT_EQ(r.text, expected);
+}
+
+// ---------------- /read on a directory, /write + /read round trip ----------------
+
+TEST_F(LocalCommandsTest, ReadOnDirectoryReturnsErrorNotContents) {
+    LocalCommandResult r = TryHandleLocalCommand("/read sub", root_);
+    EXPECT_TRUE(r.handled);
+    EXPECT_EQ(r.text.find("nested file"), std::string::npos);
+    EXPECT_NE(r.text.find("could not open"), std::string::npos);
+}
+
+TEST_F(LocalCommandsTest, WriteThenReadRoundTripsExactContent) {
+    std::string content = "first line\n\nthird line after a blank line\n";
+    LocalCommandResult writeResult =
+        TryHandleLocalCommand("/write roundtrip.txt\n" + content, root_);
+    EXPECT_TRUE(writeResult.handled);
+    EXPECT_NE(writeResult.text.find("wrote"), std::string::npos);
+
+    LocalCommandResult readResult = TryHandleLocalCommand("/read roundtrip.txt", root_);
+    EXPECT_TRUE(readResult.handled);
+    EXPECT_NE(readResult.text.find(content), std::string::npos);
+}
+
+// ---------------- alias equivalence ----------------
+
+TEST_F(LocalCommandsTest, CwdAndPwdProduceIdenticalOutput) {
+    LocalCommandResult pwdResult = TryHandleLocalCommand("/pwd", root_);
+    LocalCommandResult cwdResult = TryHandleLocalCommand("/cwd", root_);
+    EXPECT_TRUE(pwdResult.handled);
+    EXPECT_TRUE(cwdResult.handled);
+    EXPECT_EQ(pwdResult.text, cwdResult.text);
+}
+
+TEST_F(LocalCommandsTest, CatAndReadProduceIdenticalOutputForSameFile) {
+    LocalCommandResult readResult = TryHandleLocalCommand("/read notes.txt", root_);
+    LocalCommandResult catResult = TryHandleLocalCommand("/cat notes.txt", root_);
+    EXPECT_TRUE(readResult.handled);
+    EXPECT_TRUE(catResult.handled);
+    EXPECT_EQ(readResult.text, catResult.text);
+}
+
+// ---------------- non-command messages leave the filesystem untouched ----------------
+
+TEST_F(LocalCommandsTest, PlainMessageDoesNotTouchFilesystem) {
+    auto entriesBefore = std::distance(fs::directory_iterator(root_), fs::directory_iterator());
+
+    LocalCommandResult r = TryHandleLocalCommand("hello there, no slash here at all", root_);
+    EXPECT_FALSE(r.handled);
+
+    auto entriesAfter = std::distance(fs::directory_iterator(root_), fs::directory_iterator());
+    EXPECT_EQ(entriesBefore, entriesAfter);
+    EXPECT_TRUE(fs::exists(root_ / "notes.txt"));
+    EXPECT_TRUE(fs::exists(root_ / "sub" / "deep.txt"));
 }
