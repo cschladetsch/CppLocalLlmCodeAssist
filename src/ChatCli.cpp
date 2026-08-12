@@ -227,7 +227,7 @@ int ChatCli::Run() {
     json messages = json::array();
     std::string line;
     while (true) {
-        std::cout << "\n" << rang::fg::cyan << rang::style::bold << "> " << rang::style::reset;
+        std::cout << "\n" << rang::fg::cyan << rang::style::bold << "σ " << rang::style::reset;
         if (!std::getline(std::cin, line)) {
             std::cout << "\n";
             break;
