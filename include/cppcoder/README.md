@@ -46,7 +46,7 @@ of the same `OllamaClient` and the same turn logic in
 | `MemoryStore.h` | Thread-safe persisted fact list (`~/.models/memory.json` by default) with case-insensitive dedup on add. |
 | `FactExtractor.h` | `ExtractFacts(message)` -- regex heuristics that pull durable facts ("my name is...", "I am NN yo") out of a single chat message. |
 | `FileRetriever.h` | The retrieval pre-pass that gives the assistant repository access: `FindLikelyFiles` (grep-rank candidates), `BuildRetrievalPrompt`, `ParseFileRequests`, `ReadRequestedFiles` (root-confined, budgeted), `FormatFileContext`, and `RunRetrievalPrePass` (wires the pipeline together end to end -- the single entry point `ChatServer` and `ChatCli` both call). Pure apart from the file reads and the planner model call, so the pieces below `RunRetrievalPrePass` are testable without Ollama. |
-| `LocalCommands.h` | `TryHandleLocalCommand(message, root)` -- the `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer`/`ChatCli` answer themselves instead of forwarding to Ollama, confined to `root`. Plus `FindRepoRoot(start)`, the walk-up-for-`.git` search both use to pick that root. |
+| `LocalCommands.h` | `TryHandleLocalCommand(message, root)` -- the `/pwd`, `/ls`, `/read`, `/write` chat commands `ChatServer`/`ChatCli` answer themselves instead of forwarding to Ollama, confined to `root`. Plus `FindRepoRoot(start)` and `ResolveChatFileRoot(configuredRoot, start)`, used to pick the default repo root or an explicit `--file-root`. |
 
 ## Class diagram
 
@@ -217,8 +217,8 @@ classDiagram
         +bool truncated
         +string error
     }
-    ChatServer ..> LocalCommandResult : TryHandleLocalCommand(msg, FindRepoRoot(cwd))
-    ChatCli ..> LocalCommandResult : TryHandleLocalCommand(msg, FindRepoRoot(cwd))
+    ChatServer ..> LocalCommandResult : TryHandleLocalCommand(msg, ResolveChatFileRoot(...))
+    ChatCli ..> LocalCommandResult : TryHandleLocalCommand(msg, ResolveChatFileRoot(...))
     ChatServer ..> RetrievedFile : RunRetrievalPrePass()
     ChatCli ..> RetrievedFile : RunRetrievalPrePass()
     RetrievedFile ..> CodebaseScanner : FindLikelyFiles()

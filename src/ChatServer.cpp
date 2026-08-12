@@ -166,11 +166,12 @@ int ChatServer::Run() {
     // "not in a repo" fallback is reported once at startup instead of
     // silently on every command.
     const std::filesystem::path cwd = std::filesystem::current_path();
-    const std::filesystem::path fileRoot = FindRepoRoot(cwd);
-    // FindRepoRoot returns its argument on failure, and cwd may itself
-    // be the repository root, so probe for .git rather than comparing.
+    const std::filesystem::path fileRoot = ResolveChatFileRoot(config_.fileRoot, cwd);
     std::error_code rootEc;
-    if (!std::filesystem::exists(fileRoot / ".git", rootEc)) {
+    if (!config_.fileRoot.empty()) {
+        spdlog::info("ChatServer: /ls, /read and /write are confined to '{}'",
+                     fileRoot.string());
+    } else if (!std::filesystem::exists(fileRoot / ".git", rootEc)) {
         spdlog::warn(
             "ChatServer: no enclosing git repository found -- /ls, /read and /write are "
             "confined to the current directory '{}'",
@@ -399,7 +400,7 @@ int ChatServer::Run() {
     //
     // Also intercepts local filesystem commands -- /pwd, /cwd, /ls
     // [path], /read <path>, /write <path>\n<content> -- and answers
-    // them directly against `fileRoot` (the enclosing git checkout)
+    // them directly against `fileRoot` (configured root or enclosing git checkout)
     // instead of forwarding to Ollama at all. See LocalCommands.h/.cpp
     // for the implementation and LocalCommandsTests.cpp for coverage.
     svr.Post("/api/chat", [this, fileRoot](const httplib::Request& req, httplib::Response& res) {

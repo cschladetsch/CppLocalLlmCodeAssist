@@ -19,6 +19,11 @@
     Address to bind the chat server to. Defaults to 127.0.0.1.
 .PARAMETER ServePort
     Port to bind the chat server to. Defaults to 8765.
+.PARAMETER FileRoot
+    Local filesystem root for chat `/ls`, `/read`, `/write`, and file
+    retrieval. Defaults to the nearest enclosing git repository; set to
+    a broader directory such as C:\ or $HOME to allow wider local-disk
+    access.
 .PARAMETER SkipModelCheck
     Skip the Ollama model-availability check before serving.
 .EXAMPLE
@@ -38,6 +43,7 @@ param(
     [string]$Model,
     [string]$ServeHost = '127.0.0.1',
     [int]$ServePort = 8765,
+    [string]$FileRoot,
     [switch]$SkipModelCheck
 )
 $ErrorActionPreference = 'Stop'
@@ -95,10 +101,12 @@ if (-not $SkipModelCheck -and -not $Model) {
 }
 
 $modelArgs = if ($Model) { @{ Model = $Model } } else { @{} }
+$fileRootArgs = if ($FileRoot) { @{ FileRoot = $FileRoot } } else { @{} }
 & (Join-Path $PSScriptRoot 't.ps1') `
     -Serve `
     -SkipBuild:$SkipBuild `
     -Clean:$Clean `
     @modelArgs `
+    @fileRootArgs `
     -ServeHost $ServeHost `
     -ServePort $ServePort

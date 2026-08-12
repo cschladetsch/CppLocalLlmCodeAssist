@@ -33,6 +33,22 @@ fs::path FindRepoRoot(const fs::path& start) {
     return start;
 }
 
+fs::path ResolveChatFileRoot(const std::string& configuredRoot, const fs::path& start) {
+    std::error_code ec;
+    if (configuredRoot.empty()) {
+        return FindRepoRoot(start);
+    }
+
+    fs::path root(configuredRoot);
+    if (root.is_relative()) {
+        root = fs::absolute(root, ec);
+        if (ec) root = fs::current_path() / configuredRoot;
+    }
+
+    fs::path canonical = fs::weakly_canonical(root, ec);
+    return ec ? root.lexically_normal() : canonical;
+}
+
 namespace {
 
 bool IsWithinRoot(const fs::path& resolved, const fs::path& root) {
@@ -53,9 +69,7 @@ bool IsWithinRoot(const fs::path& resolved, const fs::path& root) {
 
 std::optional<fs::path> ResolveWithinRoot(const std::string& userPath, const fs::path& root) {
     fs::path candidate(userPath);
-    if (candidate.is_absolute()) return std::nullopt;
-
-    fs::path resolved = root / candidate;
+    fs::path resolved = candidate.is_absolute() ? candidate : root / candidate;
     if (!IsWithinRoot(resolved, root)) return std::nullopt;
     return resolved;
 }
@@ -67,6 +81,18 @@ namespace {
 // below already used.
 std::optional<fs::path> ResolveLocalPath(const std::string& userPath, const fs::path& root) {
     return ResolveWithinRoot(userPath, root);
+}
+
+std::string TrimPathArg(std::string arg) {
+    const std::size_t start = arg.find_first_not_of(" \t\r");
+    if (start == std::string::npos) return {};
+    const std::size_t end = arg.find_last_not_of(" \t\r");
+    arg = arg.substr(start, end - start + 1);
+
+    if (arg.size() >= 2 && arg.front() == '"' && arg.back() == '"') {
+        return arg.substr(1, arg.size() - 2);
+    }
+    return arg;
 }
 
 LocalCommandResult HandlePwd(const fs::path& root) {
@@ -81,10 +107,11 @@ LocalCommandResult HandleLs(const std::string& arg, const fs::path& root) {
     r.handled = true;
 
     fs::path target = root;
-    if (!arg.empty()) {
-        auto resolved = ResolveLocalPath(arg, root);
+    std::string pathArg = TrimPathArg(arg);
+    if (!pathArg.empty()) {
+        auto resolved = ResolveLocalPath(pathArg, root);
         if (!resolved) {
-            r.text = "ls: '" + arg + "' is outside the accessible root";
+            r.text = "ls: '" + pathArg + "' is outside the accessible root";
             return r;
         }
         target = *resolved;
@@ -92,7 +119,7 @@ LocalCommandResult HandleLs(const std::string& arg, const fs::path& root) {
 
     std::error_code ec;
     if (!fs::exists(target, ec) || !fs::is_directory(target, ec)) {
-        r.text = "ls: '" + arg + "' is not a directory";
+        r.text = "ls: '" + pathArg + "' is not a directory";
         return r;
     }
 
@@ -120,18 +147,19 @@ constexpr std::size_t kMaxReadBytes = 200 * 1024;
 LocalCommandResult HandleRead(const std::string& arg, const fs::path& root) {
     LocalCommandResult r;
     r.handled = true;
-    if (arg.empty()) {
+    std::string pathArg = TrimPathArg(arg);
+    if (pathArg.empty()) {
         r.text = "read: missing path (usage: /read <relative-path>)";
         return r;
     }
-    auto resolved = ResolveLocalPath(arg, root);
+    auto resolved = ResolveLocalPath(pathArg, root);
     if (!resolved) {
-        r.text = "read: '" + arg + "' is outside the accessible root";
+        r.text = "read: '" + pathArg + "' is outside the accessible root";
         return r;
     }
     std::ifstream in(*resolved, std::ios::binary);
     if (!in) {
-        r.text = "read: could not open '" + arg + "'";
+        r.text = "read: could not open '" + pathArg + "'";
         return r;
     }
     std::ostringstream contentStream;
@@ -141,7 +169,7 @@ LocalCommandResult HandleRead(const std::string& arg, const fs::path& root) {
     if (truncated) content.resize(kMaxReadBytes);
 
     std::ostringstream out;
-    out << "--- " << arg << " ---\n" << content;
+    out << "--- " << pathArg << " ---\n" << content;
     if (truncated) out << "\n[truncated at " << kMaxReadBytes / 1024 << " KB]";
     r.text = out.str();
     return r;
@@ -151,13 +179,14 @@ LocalCommandResult HandleWrite(const std::string& arg, const std::string& conten
                                 const fs::path& root) {
     LocalCommandResult r;
     r.handled = true;
-    if (arg.empty()) {
+    std::string pathArg = TrimPathArg(arg);
+    if (pathArg.empty()) {
         r.text = "write: missing path (usage: /write <relative-path>\\n<content>)";
         return r;
     }
-    auto resolved = ResolveLocalPath(arg, root);
+    auto resolved = ResolveLocalPath(pathArg, root);
     if (!resolved) {
-        r.text = "write: '" + arg + "' is outside the accessible root";
+        r.text = "write: '" + pathArg + "' is outside the accessible root";
         return r;
     }
 
@@ -166,22 +195,22 @@ LocalCommandResult HandleWrite(const std::string& arg, const std::string& conten
     if (!parent.empty()) {
         fs::create_directories(parent, ec);
         if (ec) {
-            r.text = "write: could not create directory for '" + arg + "': " + ec.message();
+            r.text = "write: could not create directory for '" + pathArg + "': " + ec.message();
             return r;
         }
     }
 
     std::ofstream out(*resolved, std::ios::binary | std::ios::trunc);
     if (!out) {
-        r.text = "write: could not open '" + arg + "' for writing";
+        r.text = "write: could not open '" + pathArg + "' for writing";
         return r;
     }
     out << content;
     if (!out) {
-        r.text = "write: write failed for '" + arg + "'";
+        r.text = "write: write failed for '" + pathArg + "'";
         return r;
     }
-    r.text = "write: wrote " + std::to_string(content.size()) + " byte(s) to '" + arg + "'";
+    r.text = "write: wrote " + std::to_string(content.size()) + " byte(s) to '" + pathArg + "'";
     return r;
 }
 

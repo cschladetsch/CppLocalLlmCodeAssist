@@ -9,7 +9,7 @@ flowchart LR
   B --> C[ResolveModelHome]
   B --> D[ResolveModelPath]
   B --> E[EnsureModelDir]
-  C --> F[~/.local/share/deepseek/models]
+  C --> F[~/.models]
   D --> G[SanitizePathComponent]
   B -.logs via.-> H[spdlog::spdlog]
 ```
@@ -93,10 +93,8 @@ target_link_libraries(your_target PRIVATE ModelStore::ModelStore)
 
 **Environment**
 - `DEEPSEEK_MODEL_HOME`: Optional override for the global model store.
-- `XDG_DATA_HOME`: Optional base for the default model store.
-
 Default model store:
-- `~/.local/share/deepseek/models`
+- `~/.models`
 
 **Windows notes**
 - `getenv` calls are wrapped in `#pragma warning(push)` / `disable :

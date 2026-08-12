@@ -25,12 +25,15 @@ std::string ResolveModelHomeInternal() {
     spdlog::debug("ModelStore: using DEEPSEEK_MODEL_HOME override: {}", override_dir);
     return override_dir;
   }
-  const char* xdg_data_home = std::getenv("XDG_DATA_HOME");
+#if defined(_WIN32)
+  const char* home = std::getenv("USERPROFILE");
+  if (!home || std::string(home).empty()) {
+    home = std::getenv("HOME");
+  }
+#else
   const char* home = std::getenv("HOME");
-  std::string base = (xdg_data_home && std::string(xdg_data_home).size() > 0)
-                         ? xdg_data_home
-                         : (home ? std::string(home) + "/.local/share" : ".");
-  std::string resolved = base + "/deepseek/models";
+#endif
+  std::string resolved = home ? std::string(home) + "/.models" : ".models";
   spdlog::debug("ModelStore: resolved model home to {}", resolved);
   return resolved;
 }
@@ -80,11 +83,8 @@ std::string SanitizePathComponent(std::string_view component) {
 std::string ModelStore::ResolveModelHome() { return ResolveModelHomeInternal(); }
 
 std::string ModelStore::ResolveModelPath(std::string_view model_name) {
-  std::string home = ResolveModelHomeInternal();
-  if (!home.empty() && home.back() != '/') {
-    home.push_back('/');
-  }
-  return home + SanitizePathComponent(model_name);
+  return (std::filesystem::path(ResolveModelHomeInternal()) / SanitizePathComponent(model_name))
+      .string();
 }
 
 std::optional<std::string> ModelStore::EnsureModelDir(std::string_view model_name,

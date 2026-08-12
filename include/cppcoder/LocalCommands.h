@@ -7,8 +7,9 @@
 namespace cppcoder {
 
 // Resolves a user-supplied path against `root` and returns it only if it
-// stays inside: absolute paths are refused outright, and ".." segments
-// and symlinks are resolved *before* the containment check rather than
+// stays inside: relative paths are resolved from `root`, absolute paths
+// are allowed only when already under `root`, and ".." segments and
+// symlinks are resolved *before* the containment check rather than
 // followed, so neither can be used to climb out. Returns nullopt when
 // the path escapes.
 //
@@ -30,6 +31,13 @@ std::optional<std::filesystem::path> ResolveWithinRoot(const std::string& userPa
 // filesystem root, which keeps callers usable outside a repository.
 std::filesystem::path FindRepoRoot(const std::filesystem::path& start);
 
+// Chooses the local filesystem root for chat commands. Empty
+// `configuredRoot` preserves the historical behavior (nearest enclosing
+// git checkout, falling back to `start`); a non-empty value is resolved
+// to an absolute/canonical directory and used directly.
+std::filesystem::path ResolveChatFileRoot(const std::string& configuredRoot,
+                                           const std::filesystem::path& start);
+
 struct LocalCommandResult {
     bool handled = false;  // false: not a local command, fall through to Ollama
     std::string text;      // reply text (result on success, error message on failure)
@@ -40,14 +48,15 @@ struct LocalCommandResult {
 // /write <path>\n<content> -- against `root`, rejecting any path
 // argument that resolves outside it (same root-confinement guard as
 // PatchApplier::IsPathSafe, just scoped to a caller-supplied root
-// instead of a codebase root).
+// instead of a codebase root). Absolute paths are accepted when they
+// stay inside `root`.
 //
 // Pure aside from the filesystem I/O the commands themselves perform;
 // takes `root` explicitly (rather than deriving one itself) so tests
 // can point it at a temp directory. ChatServer.cpp calls this with
-// FindRepoRoot(std::filesystem::current_path()), so the reachable area
-// is the whole checkout rather than just the directory the server
-// happened to be launched from.
+// ResolveChatFileRoot(...), so the default reachable area is the whole
+// checkout rather than just the directory the server happened to be
+// launched from; callers can pass an explicit root for wider access.
 //
 // Returns handled=false for any message that isn't one of these
 // commands, leaving the caller to fall through to its normal path.

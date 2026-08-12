@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 
 #include <gtest/gtest.h>
 
@@ -22,6 +23,20 @@ void SetEnvVar(const char* name, const std::string& value) {
 #endif
 }
 
+std::optional<std::string> GetEnvVar(const char* name) {
+#if defined(_WIN32)
+  char* buffer = nullptr;
+  std::size_t size = 0;
+  if (_dupenv_s(&buffer, &size, name) != 0 || buffer == nullptr) return std::nullopt;
+  std::string value(buffer);
+  free(buffer);
+  return value;
+#else
+  const char* value = std::getenv(name);
+  return value ? std::optional<std::string>(value) : std::nullopt;
+#endif
+}
+
 void UnsetEnvVar(const char* name) {
 #if defined(_WIN32)
   _putenv_s(name, "");
@@ -34,11 +49,11 @@ void UnsetEnvVar(const char* name) {
 
 TEST(ModelStoreTests, ResolveAndCreate) {
   const char* kEnv = "DEEPSEEK_MODEL_HOME";
-  const std::string base = "/tmp/deepseek_models_test";
+  const std::string base = (fs::temp_directory_path() / "deepseek_models_test").string();
   SetEnvVar(kEnv, base);
 
   const std::string model = "deepseek-r1";
-  const std::string expected = base + "/" + model;
+  const std::string expected = (fs::path(base) / model).string();
   EXPECT_EQ(deepseek::ModelStore::ResolveModelPath(model), expected);
 
   std::string error;
@@ -59,11 +74,11 @@ TEST(ModelStoreTests, SanitizesColonsInModelNameForWindowsCompatibility) {
   // normal path character. ResolveModelPath must sanitize it so the
   // resulting path is a real, creatable directory on every platform.
   const char* kEnv = "DEEPSEEK_MODEL_HOME";
-  const std::string base = "/tmp/deepseek_models_test_colon";
+  const std::string base = (fs::temp_directory_path() / "deepseek_models_test_colon").string();
   SetEnvVar(kEnv, base);
 
   const std::string model = "qwen2.5-coder:7b";
-  const std::string expected = base + "/qwen2.5-coder_7b";
+  const std::string expected = (fs::path(base) / "qwen2.5-coder_7b").string();
   EXPECT_EQ(deepseek::ModelStore::ResolveModelPath(model), expected);
 
   std::string error;
@@ -76,4 +91,19 @@ TEST(ModelStoreTests, SanitizesColonsInModelNameForWindowsCompatibility) {
   EXPECT_FALSE(ec);
 
   UnsetEnvVar(kEnv);
+}
+
+TEST(ModelStoreTests, DefaultsToDotModelsUnderUserHome) {
+  const char* kEnv = "DEEPSEEK_MODEL_HOME";
+  const std::optional<std::string> orig_model_home = GetEnvVar(kEnv);
+  UnsetEnvVar(kEnv);
+
+  const fs::path resolved = fs::path(deepseek::ModelStore::ResolveModelHome());
+  EXPECT_EQ(resolved.filename().string(), ".models");
+
+  if (orig_model_home) {
+    SetEnvVar(kEnv, *orig_model_home);
+  } else {
+    UnsetEnvVar(kEnv);
+  }
 }

@@ -11,6 +11,7 @@ namespace fs = std::filesystem;
 
 using cppcoder::FindRepoRoot;
 using cppcoder::LocalCommandResult;
+using cppcoder::ResolveChatFileRoot;
 using cppcoder::ResolveWithinRoot;
 using cppcoder::TryHandleLocalCommand;
 
@@ -137,6 +138,13 @@ TEST_F(LocalCommandsTest, ReadNestedPathWorks) {
     EXPECT_NE(r.text.find("nested file"), std::string::npos);
 }
 
+TEST_F(LocalCommandsTest, ReadQuotedPathWorks) {
+    WriteFile(root_ / "name with spaces.txt", "spaced path\n");
+    LocalCommandResult r = TryHandleLocalCommand("/read \"name with spaces.txt\"", root_);
+    EXPECT_TRUE(r.handled);
+    EXPECT_NE(r.text.find("spaced path"), std::string::npos);
+}
+
 TEST_F(LocalCommandsTest, ReadMissingPathReportsUsage) {
     LocalCommandResult r = TryHandleLocalCommand("/read", root_);
     EXPECT_TRUE(r.handled);
@@ -163,6 +171,12 @@ TEST_F(LocalCommandsTest, ReadRejectsAbsolutePath) {
 #endif
     EXPECT_TRUE(r.handled);
     EXPECT_NE(r.text.find("outside"), std::string::npos);
+}
+
+TEST_F(LocalCommandsTest, ReadAcceptsAbsolutePathInsideRoot) {
+    LocalCommandResult r = TryHandleLocalCommand("/read " + (root_ / "notes.txt").string(), root_);
+    EXPECT_TRUE(r.handled);
+    EXPECT_NE(r.text.find("hello from notes"), std::string::npos);
 }
 
 TEST_F(LocalCommandsTest, ReadTruncatesLargeFiles) {
@@ -196,6 +210,13 @@ TEST_F(LocalCommandsTest, WriteCreatesParentDirectories) {
     EXPECT_EQ(ReadFile(root_ / "new" / "deeper" / "file.txt"), "content");
 }
 
+TEST_F(LocalCommandsTest, WriteQuotedPathWorks) {
+    LocalCommandResult r = TryHandleLocalCommand("/write \"name with spaces.txt\"\ncontent", root_);
+    EXPECT_TRUE(r.handled);
+    EXPECT_NE(r.text.find("wrote"), std::string::npos);
+    EXPECT_EQ(ReadFile(root_ / "name with spaces.txt"), "content");
+}
+
 TEST_F(LocalCommandsTest, WriteMissingPathReportsUsage) {
     LocalCommandResult r = TryHandleLocalCommand("/write", root_);
     EXPECT_TRUE(r.handled);
@@ -224,6 +245,14 @@ TEST_F(LocalCommandsTest, WriteRejectsAbsolutePath) {
 #endif
     EXPECT_TRUE(r.handled);
     EXPECT_NE(r.text.find("outside"), std::string::npos);
+}
+
+TEST_F(LocalCommandsTest, WriteAcceptsAbsolutePathInsideRoot) {
+    fs::path target = root_ / "absolute-write.txt";
+    LocalCommandResult r = TryHandleLocalCommand("/write " + target.string() + "\ncontent", root_);
+    EXPECT_TRUE(r.handled);
+    EXPECT_NE(r.text.find("wrote"), std::string::npos);
+    EXPECT_EQ(ReadFile(target), "content");
 }
 
 TEST_F(LocalCommandsTest, WritePreservesMultilineContent) {
@@ -314,6 +343,16 @@ TEST_F(FindRepoRootTest, FilesystemRootTerminatesTheWalk) {
     EXPECT_NO_THROW({ (void)FindRepoRoot(fsRoot); });
 }
 
+TEST_F(FindRepoRootTest, ResolveChatFileRootUsesRepoRootByDefault) {
+    EXPECT_EQ(ResolveChatFileRoot("", base_ / "repo" / "src" / "deep"),
+              fs::weakly_canonical(base_ / "repo"));
+}
+
+TEST_F(FindRepoRootTest, ResolveChatFileRootUsesExplicitRoot) {
+    EXPECT_EQ(ResolveChatFileRoot((base_ / "plain").string(), base_ / "repo" / "src"),
+              fs::weakly_canonical(base_ / "plain"));
+}
+
 // ---------------- ResolveWithinRoot (direct) ----------------
 
 TEST_F(LocalCommandsTest, ResolveWithinRootAcceptsMixedSeparators) {
@@ -348,6 +387,12 @@ TEST_F(LocalCommandsTest, ResolveWithinRootAcceptsDeeplyNestedSubpath) {
     EXPECT_EQ(fs::weakly_canonical(*resolved),
               fs::weakly_canonical(root_ / "a" / "b" / "c" / "d.txt"));
     EXPECT_TRUE(fs::exists(*resolved));
+}
+
+TEST_F(LocalCommandsTest, ResolveWithinRootAcceptsAbsolutePathInsideRoot) {
+    auto resolved = ResolveWithinRoot((root_ / "notes.txt").string(), root_);
+    ASSERT_TRUE(resolved.has_value());
+    EXPECT_EQ(fs::weakly_canonical(*resolved), fs::weakly_canonical(root_ / "notes.txt"));
 }
 
 TEST_F(LocalCommandsTest, ResolveWithinRootRejectsSymlinkPointingOutsideRoot) {

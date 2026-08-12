@@ -87,6 +87,12 @@
 .PARAMETER ServePort
     Port to bind the chat server to when -Serve is given. Defaults to 8765.
 
+.PARAMETER FileRoot
+    Local filesystem root for chat `/ls`, `/read`, `/write`, and file
+    retrieval. Defaults to the nearest enclosing git repository; set to
+    a broader directory such as C:\ or $HOME to allow wider local-disk
+    access.
+
 .EXAMPLE
     ./r.ps1 -Serve
     Build, then start the chat server + UI at http://127.0.0.1:8765 and
@@ -96,7 +102,7 @@
 .EXAMPLE
     ./r.ps1
     Init submodules (if needed), configure with clang-cl on Windows
-    (auto), build, run all 205 tests.
+    (auto), build, run all 416 registered tests.
 
 .EXAMPLE
     ./r.ps1 -Question "How does the judge prune directions?" -Codebase .
@@ -144,7 +150,8 @@ param(
 
     [switch]$Serve,
     [string]$ServeHost = '127.0.0.1',
-    [int]$ServePort = 8765
+    [int]$ServePort = 8765,
+    [string]$FileRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -551,11 +558,12 @@ if ($Serve) {
 
     try {
         $modelArgs = if ($Model) { @('--model', $Model) } else { @() }
+        $fileRootArgs = if ($FileRoot) { @('--file-root', $FileRoot) } else { @() }
         # --no-open-browser: the $openJob above already opens the browser
         # for this script's own callers -- without this, cppcoder's own
         # (newer) auto-open would fire too and pop a second tab.
         & $exe --serve --serve-host $ServeHost --serve-port $ServePort @modelArgs `
-            --log-level $LogLevel --no-open-browser
+            @fileRootArgs --log-level $LogLevel --no-open-browser
     }
     finally {
         Remove-Job -Job $openJob -Force -ErrorAction SilentlyContinue

@@ -48,11 +48,13 @@ void PrintUsage(const char* argv0) {
         << "  --serve-port <port>      Port to bind the chat server to (default: 8765)\n"
         << "  --web-root <path>        Directory to serve as the chat UI (default: auto-detect ./web)\n"
         << "  --memory-file <path>     Facts file to persist/read (default: ~/.models/memory.json)\n"
+        << "  --file-root <path>       Local filesystem root for /ls, /read, /write (default: repo root)\n"
         << "  --no-open-browser        Don't open the chat UI in a browser once the server is up\n"
         << "\n"
         << "Interactive CLI mode options:\n"
         << "  --cli                    Start an interactive terminal chat session (\"Claude Code\"-style)\n"
         << "  --memory-file <path>     Facts file to persist/read (default: ~/.models/memory.json)\n"
+        << "  --file-root <path>       Local filesystem root for /ls, /read, /write (default: repo root)\n"
         << "  --no-file-context        Disable the retrieval pre-pass (repository-aware answers)\n"
         << "\n"
         << "Shared Ollama options:\n"
@@ -167,6 +169,7 @@ int main(int argc, char** argv) {
     int servePort = 8765;
     std::string webRoot;
     std::string memoryFilePath;
+    std::string fileRoot;
     bool fileContextEnabled = true;
     bool openBrowser = true;
 
@@ -214,6 +217,8 @@ int main(int argc, char** argv) {
             webRoot = next("--web-root");
         } else if (arg == "--memory-file") {
             memoryFilePath = next("--memory-file");
+        } else if (arg == "--file-root") {
+            fileRoot = next("--file-root");
         } else if (arg == "--no-open-browser") {
             openBrowser = false;
         } else if (arg == "--no-file-context") {
@@ -245,6 +250,7 @@ int main(int argc, char** argv) {
         serverConfig.defaultModel = ollamaConfig.model;
         serverConfig.webRoot = webRoot.empty() ? ResolveDefaultWebRoot(argv[0]) : webRoot;
         serverConfig.memoryFilePath = memoryFilePath;
+        serverConfig.fileRoot = fileRoot;
         serverConfig.fileContextEnabled = fileContextEnabled;
         serverConfig.openBrowser = openBrowser;
 
@@ -266,6 +272,7 @@ int main(int argc, char** argv) {
         cliConfig.ollamaPort = ollamaConfig.port;
         cliConfig.model = ollamaConfig.model;
         cliConfig.memoryFilePath = memoryFilePath;
+        cliConfig.fileRoot = fileRoot;
         cliConfig.fileContextEnabled = fileContextEnabled;
 
         cppcoder::ChatCli cli(std::move(cliConfig));

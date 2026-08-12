@@ -261,7 +261,8 @@ the chat UI running -- it forwards to `t.ps1 -Serve`:
 ```
 
 Run `Get-Help ./t.ps1 -Full` (or `./r.ps1 -Full`) for every parameter
-(`-EventsFile`, `-LogLevel`, `-Model`, `-SkipTests`, `-ServeHost`, `-ServePort`, ...).
+(`-EventsFile`, `-FileRoot`, `-LogLevel`, `-Model`, `-SkipTests`, `-ServeHost`,
+`-ServePort`, ...).
 
 > **Windows note:** LLVM 21.1.1 has a real bug that OOMs parsing MSVC's
 > C++23 STL headers on trivial files -- confirmed on both `clang++` and
@@ -412,6 +413,7 @@ panel to view, add, or forget facts by hand (`GET`/`POST`/`DELETE
 | `--serve-port <port>` | `8765` | Port to bind the chat server to |
 | `--web-root <path>` | auto-detect `./web` | Directory to serve as the chat UI |
 | `--memory-file <path>` | `~/.models/memory.json` | Facts file to persist/read |
+| `--file-root <path>` | nearest enclosing git repo | Local filesystem root for `/ls`, `/read`, `/write`, and retrieval |
 | `--no-file-context` | *(pre-pass on)* | Disable the retrieval pre-pass described below |
 | `--model <name>` | `qwen2.5-coder:1.5b` | Default Ollama model tag (switchable per-conversation from the UI) |
 | `--host` / `--port` | `localhost` / `11434` | Ollama connection used to service `/api/models` and `/api/chat` |
@@ -504,10 +506,18 @@ submodule scopes to that submodule. Started outside any repository, the
 commands fall back to the working directory and log a warning at startup.
 
 Every path argument is resolved against that root and rejected if it
-would escape: absolute paths are refused outright, and `..` segments and
-symlinks are resolved before the containment check rather than followed
-(the same guard `PatchApplier` applies to the codebase root). See
+would escape: relative paths are resolved from the root, absolute paths
+are accepted only when they are still under the root, and `..` segments
+and symlinks are resolved before the containment check rather than
+followed (the same guard `PatchApplier` applies to the codebase root).
+Quote paths that contain spaces, e.g. `/read "docs/my note.txt"`. See
 [`include/cppcoder/LocalCommands.h`](include/cppcoder/LocalCommands.h).
+
+Pass `--file-root <path>` to change the reachable area. For example,
+`cppcoder --serve --file-root C:\` allows commands such as
+`/read C:\Users\chris\notes.txt` and `/write C:\tmp\out.txt`, while
+still rejecting paths outside `C:\`. The same option works with
+`cppcoder --cli`, and `./r.ps1 -FileRoot C:\` forwards it for the web UI.
 
 ### CLI chat mode
 
@@ -525,6 +535,7 @@ with `/exit`, `/quit`, or EOF (Ctrl+D / Ctrl+Z).
 |---|---|---|
 | `--cli` | *(off)* | Start the interactive terminal chat session instead of researching |
 | `--memory-file <path>` | `~/.models/memory.json` | Facts file to persist/read |
+| `--file-root <path>` | nearest enclosing git repo | Local filesystem root for `/ls`, `/read`, `/write`, and retrieval |
 | `--no-file-context` | *(pre-pass on)* | Disable the retrieval pre-pass |
 | `--model <name>` | `qwen2.5-coder:1.5b` | Ollama model tag |
 | `--host` / `--port` | `localhost` / `11434` | Ollama connection |
@@ -544,9 +555,9 @@ diagnostic logging.
 
 ## Test
 
-205 tests in `cppcoder_tests` (this repo's own suite) plus 3 more inside
+412 tests in `cppcoder_tests` (this repo's own suite) plus 4 more inside
 the `external/CppLmmModelStore` submodule (`ModelStoreTests`,
-`StreamParserTests`) -- 136 total, all pure/offline. The network-facing
+`StreamParserTests`) -- 416 total, all pure/offline. The network-facing
 parts are tested via pure functions -- `Worker::ParseWorkerResponse`,
 `Judge::ApplyJudgeResponse`, `Editor::ParseEditResponse`, `FallbackKeywords`,
 `ResearchEngine::SeedInitialTasks`, `EditEngine::SeedInitialTasks` --

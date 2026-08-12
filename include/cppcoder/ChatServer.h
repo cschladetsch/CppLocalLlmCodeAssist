@@ -26,6 +26,11 @@ struct ChatServerConfig {
     // "use MemoryStore::ResolveDefaultPath()".
     std::string memoryFilePath;
 
+    // Root local filesystem commands and retrieval are allowed to read
+    // and write under. Empty means "nearest enclosing git repository,
+    // falling back to the process cwd".
+    std::string fileRoot;
+
     // Whether to run the retrieval pre-pass (FileRetriever.h) that lets
     // the assistant read repository files before answering. Costs one
     // extra non-streaming model round trip per chat turn, so it's worth

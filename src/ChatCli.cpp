@@ -208,9 +208,11 @@ std::string ChatCli::StreamChat(const std::string& messagesJson) const {
 
 int ChatCli::Run() {
     const std::filesystem::path cwd = std::filesystem::current_path();
-    const std::filesystem::path fileRoot = FindRepoRoot(cwd);
+    const std::filesystem::path fileRoot = ResolveChatFileRoot(config_.fileRoot, cwd);
     std::error_code rootEc;
-    if (!std::filesystem::exists(fileRoot / ".git", rootEc)) {
+    if (!config_.fileRoot.empty()) {
+        spdlog::info("ChatCli: /ls, /read and /write are confined to '{}'", fileRoot.string());
+    } else if (!std::filesystem::exists(fileRoot / ".git", rootEc)) {
         spdlog::warn(
             "ChatCli: no enclosing git repository found -- /ls, /read and /write are confined "
             "to the current directory '{}'",

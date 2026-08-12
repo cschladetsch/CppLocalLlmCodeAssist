@@ -35,7 +35,7 @@ ctest -E 'ModelStoreTests|StreamParserTests'
 | `EditEngineTests.cpp` | 5 | `SeedInitialTasks` (same dedup/merge expectations as `ResearchEngineTests.cpp`), `EditEngineConfig` dry-run default. |
 | `MemoryStoreTests.cpp` | 9 | Persistence round-trip, case-insensitive add-dedup, remove, empty/whitespace rejection, `ResolveDefaultPath` env-var precedence. |
 | `FactExtractorTests.cpp` | 8 | Name/age regex patterns (with and without "is"), assistant-name phrasing, multi-fact messages, no-match cases. |
-| `LocalCommandsTests.cpp` | 34 | `TryHandleLocalCommand`: `/pwd`, `/ls`, `/read`, `/write` behaviour and their aliases, non-command fall-through, path-traversal and absolute-path rejection, read truncation, multi-line writes. Plus `FindRepoRoot`: `.git` directory vs. `.git` file, nested start, nearest-repository-wins, no-repository fall back to `start`, filesystem-root termination. |
+| `LocalCommandsTests.cpp` | 41 | `TryHandleLocalCommand`: `/pwd`, `/ls`, `/read`, `/write` behaviour and their aliases, non-command fall-through, path-traversal rejection, absolute/quoted paths, read truncation, multi-line writes. Plus `FindRepoRoot`/`ResolveChatFileRoot`: `.git` directory vs. `.git` file, nested start, nearest-repository-wins, no-repository fall back to `start`, filesystem-root termination, explicit root. |
 
 | `FileRetrieverTests.cpp` | 35 | The chat-mode retrieval pre-pass. `FindLikelyFiles`: content-not-filename matching, rank-by-match-count, conversational-word and saturated-term filtering. `ParseFileRequests`: plain/fenced/prose-wrapped JSON, malformed and non-array replies, non-string entries. `ReadRequestedFiles`: root confinement, hallucinated paths reported rather than dropped, per-file and total byte budgets, file-count cap. `FormatFileContext`: headers, truncation markers, all-failed yielding no context. |
 
@@ -56,14 +56,14 @@ flowchart TD
         EditEngineTests["EditEngineTests.cpp (5)"]
         MemoryStoreTests["MemoryStoreTests.cpp (9)"]
         FactExtractorTests["FactExtractorTests.cpp (8)"]
-        LocalCommandsTests["LocalCommandsTests.cpp (34)"]
+        LocalCommandsTests["LocalCommandsTests.cpp (41)"]
         FileRetrieverTests["FileRetrieverTests.cpp (35)"]
     end
     exe --> cppcoder_core
     exe --> GTest[("GTest::gtest_main")]
 
     subgraph submodule["external/CppLmmModelStore (separate executables)"]
-        ModelStoreTests["ModelStoreTests (2)"]
+        ModelStoreTests["ModelStoreTests (3)"]
         StreamParserTests["StreamParserTests (1)"]
     end
     submodule --> GTest

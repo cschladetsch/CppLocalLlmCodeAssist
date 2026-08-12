@@ -9,11 +9,10 @@ def resolve_model_home() -> Path:
     override = os.getenv("DEEPSEEK_MODEL_HOME")
     if override:
         return Path(override)
-    xdg = os.getenv("XDG_DATA_HOME")
-    if xdg:
-        return Path(xdg) / "deepseek" / "models"
-    home = os.getenv("HOME", ".")
-    return Path(home) / ".local" / "share" / "deepseek" / "models"
+    home = os.getenv("USERPROFILE") if os.name == "nt" else os.getenv("HOME")
+    if not home:
+        home = os.getenv("HOME", ".")
+    return Path(home) / ".models"
 
 
 def ensure_dir(path: Path) -> None:
