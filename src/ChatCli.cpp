@@ -77,8 +77,6 @@ private:
     std::thread thread_;
 };
 
-}  // namespace
-
 std::string ChatCli::StreamChat(const std::string& messagesJson) const {
     json out;
     out["model"] = config_.model;
@@ -137,26 +135,6 @@ std::string ChatCli::StreamChat(const std::string& messagesJson) const {
             }
         };
 
-        // Always continue past a non-2xx response rather than aborting:
-        // Ollama's error responses carry a JSON {"error": "..."} body
-        // (e.g. "cudaMalloc failed: out of memory") that's only visible
-        // by letting content_receiver read it below.
-        req.response_handler = [&httpStatus](const httplib::Response& r) {
-            httpStatus = r.status;
-            return true;
-        };
-        req.content_receiver = [&](const char* data, size_t len, uint64_t, uint64_t) -> bool {
-            spinner.Stop();
-            ndjsonBuffer.append(data, len);
-            std::size_t pos;
-            while ((pos = ndjsonBuffer.find('\n')) != std::string::npos) {
-                std::string line = ndjsonBuffer.substr(0, pos);
-                ndjsonBuffer.erase(0, pos + 1);
-                tryParseLine(line);
-            }
-            return true;
-        };
-
         auto res = ollama.send(req);
         spinner.Stop();
 
@@ -194,17 +172,18 @@ std::string ChatCli::StreamChat(const std::string& messagesJson) const {
 
         const bool retryable = !sawContent && IsRetryableStatus(httpStatus) && attempt < kRetryDelays.size();
         if (!retryable) {
-            std::cerr << "\n" << rang::fg::red << rang::style::bold << "[error] " << errorMessage
+            std::cerr << rang::fg::yellow << "[retry] " << errorMessage << " -- retrying in "
+                   << delay.count() << "s..." << rang::style::reset << "\n";
+            std::this_thread::sleep_for(delay);
+        } else {
+            std::cerr << rang::fg::red << "[error] " << errorMessage
                       << rang::style::reset << "\n";
             return {};
         }
-
-        auto delay = kRetryDelays[attempt];
-        std::cerr << rang::fg::yellow << "[retry] " << errorMessage << " -- retrying in "
-                   << delay.count() << "s..." << rang::style::reset << "\n";
-        std::this_thread::sleep_for(delay);
     }
 }
+
+}  // namespace
 
 int ChatCli::Run() {
     const std::filesystem::path cwd = std::filesystem::current_path();
