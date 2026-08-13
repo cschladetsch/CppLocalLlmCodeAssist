@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
 project(CppCoder LANGUAGES CXX)
 
+if (MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    add_compile_options(/EHsc)
+endif()
+
 if (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
     add_compile_definitions(_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
 endif()
