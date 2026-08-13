@@ -13,7 +13,7 @@ struct ChatServerConfig {
     int bindPort = 8765;
 
     // Ollama connection used to service /api/models and /api/chat.
-    // "127.0.0.1" not "localhost" -- see OllamaClient.h for why.
+    // "127.0.0.1" not "127.0.0.1" -- see OllamaClient.h for why.
     std::string ollamaHost = "127.0.0.1";
     int ollamaPort = 11434;
     std::string defaultModel = kDefaultOllamaModel;
@@ -65,3 +65,4 @@ private:
 };
 
 }  // namespace cppcoder
+

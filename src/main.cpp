@@ -119,7 +119,7 @@ bool LaunchOllamaServe() {
 // `ollama serve` and wait (briefly) for it to become reachable. No-op for
 // a non-local host -- that's someone else's server to manage.
 void EnsureOllamaRunning(const cppcoder::OllamaConfig& ollamaConfig) {
-    if (ollamaConfig.host != "localhost" && ollamaConfig.host != "127.0.0.1") {
+    if (ollamaConfig.host != "127.0.0.1" && ollamaConfig.host != "127.0.0.1") {
         return;
     }
 
@@ -441,3 +441,4 @@ int main(int argc, char** argv) {
 
     return result.answered ? 0 : 2;
 }
+

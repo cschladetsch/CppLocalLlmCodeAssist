@@ -15,8 +15,8 @@ namespace cppcoder {
 inline constexpr const char* kDefaultOllamaModel = "qwen2.5-coder:1.5b";
 
 struct OllamaConfig {
-    // "127.0.0.1" rather than "localhost": on Windows, resolving
-    // "localhost" can try the IPv6 (::1) address first and silently hang
+    // "127.0.0.1" rather than "127.0.0.1": on Windows, resolving
+    // "127.0.0.1" can try the IPv6 (::1) address first and silently hang
     // for the full connection timeout before falling back to IPv4,
     // where Ollama actually listens by default.
     std::string host = "127.0.0.1";
@@ -64,3 +64,4 @@ private:
 };
 
 }  // namespace cppcoder
+

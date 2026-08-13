@@ -9,7 +9,7 @@ namespace cppcoder {
 
 struct ChatCliConfig {
     // Ollama connection used to service the chat turn and the retrieval
-    // pre-pass. "127.0.0.1" not "localhost" -- see OllamaClient.h for why.
+    // pre-pass. "127.0.0.1" not "127.0.0.1" -- see OllamaClient.h for why.
     std::string ollamaHost = "127.0.0.1";
     int ollamaPort = 11434;
     std::string model = kDefaultOllamaModel;
@@ -56,3 +56,4 @@ private:
 };
 
 }  // namespace cppcoder
+
