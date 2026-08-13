@@ -77,6 +77,8 @@ private:
     std::thread thread_;
 };
 
+} // namespace
+
 std::string ChatCli::StreamChat(const std::string& messagesJson) const {
     json out;
     out["model"] = config_.model;
@@ -171,9 +173,10 @@ std::string ChatCli::StreamChat(const std::string& messagesJson) const {
         }
 
         const bool retryable = !sawContent && IsRetryableStatus(httpStatus) && attempt < kRetryDelays.size();
-        if (!retryable) {
+        if (retryable) {
+            const auto delay = kRetryDelays[attempt];
             std::cerr << rang::fg::yellow << "[retry] " << errorMessage << " -- retrying in "
-                   << delay.count() << "s..." << rang::style::reset << "\n";
+                      << delay.count() << "s..." << rang::style::reset << "\n";
             std::this_thread::sleep_for(delay);
         } else {
             std::cerr << rang::fg::red << "[error] " << errorMessage
@@ -182,8 +185,6 @@ std::string ChatCli::StreamChat(const std::string& messagesJson) const {
         }
     }
 }
-
-}  // namespace
 
 int ChatCli::Run() {
     const std::filesystem::path cwd = std::filesystem::current_path();
