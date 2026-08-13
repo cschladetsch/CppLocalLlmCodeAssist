@@ -13,3 +13,6 @@
 [submodule "web/vendor/mathjax"]
 	path = web/vendor/mathjax
 	url = https://github.com/mathjax/MathJax.git
+[submodule "external/CppLogiMake"]
+	path = external/CppLogiMake
+	url = https://github.com/cschladetsch/CppLogiMake.git
