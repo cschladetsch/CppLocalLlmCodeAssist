@@ -153,6 +153,8 @@ void EnsureOllamaRunning(const cppcoder::OllamaConfig& ollamaConfig) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
     std::string question;
     std::string task;
     bool applyEdits = false;
