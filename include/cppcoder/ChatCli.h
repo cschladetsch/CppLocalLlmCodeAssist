@@ -28,6 +28,7 @@ struct ChatCliConfig {
     // extra non-streaming model round trip per turn, so it's worth
     // turning off for pure conversational use on slow hardware.
     bool fileContextEnabled = true;
+    int timeoutSeconds = 60;
 };
 
 // Terminal counterpart to ChatServer: the same Ollama-backed chat turn
@@ -41,7 +42,7 @@ public:
 
     // Runs the read-eval-print loop until EOF (Ctrl+D / Ctrl+Z) or the
     // user types /exit or /quit. Returns a process exit code.
-    int Run();
+    void Run();
 
 private:
     // Streams one /api/chat turn from Ollama straight to stdout as it
@@ -56,4 +57,5 @@ private:
 };
 
 }  // namespace cppcoder
+
 

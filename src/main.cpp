@@ -278,7 +278,7 @@ int main(int argc, char** argv) {
         cliConfig.fileContextEnabled = fileContextEnabled;
 
         cppcoder::ChatCli cli(std::move(cliConfig));
-        return cli.Run();
+        cli.Run(); return 0;
     }
 
     if (!task.empty()) {
@@ -443,4 +443,5 @@ int main(int argc, char** argv) {
 
     return result.answered ? 0 : 2;
 }
+
 

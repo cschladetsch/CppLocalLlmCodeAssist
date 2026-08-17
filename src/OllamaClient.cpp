@@ -8,11 +8,25 @@ namespace cppcoder {
 
 using json = nlohmann::json;
 
+namespace {
+std::string GetClientUrl(const std::string& host, int port) {
+    std::string base = host;
+    if (base.rfind("http://", 0) != 0 && base.rfind("https://", 0) != 0) {
+        base = "http://" + base;
+    }
+    if (base.find(':', 8) == std::string::npos && port > 0) {
+        base += ":" + std::to_string(port);
+    }
+    return base;
+}
+} // namespace
+
 OllamaClient::OllamaClient(OllamaConfig config) : config_(std::move(config)) {}
 
 std::optional<std::string> OllamaClient::Generate(const std::string& prompt,
-                                                    const std::string& systemPrompt) const {
-    httplib::Client cli(config_.host, config_.port);
+                                                  const std::string& systemPrompt) const {
+    std::string url = GetClientUrl(config_.host, config_.port);
+    httplib::Client cli(url);
     cli.set_read_timeout(config_.timeoutSeconds, 0);
     cli.set_write_timeout(config_.timeoutSeconds, 0);
     cli.set_connection_timeout(10, 0);
@@ -52,7 +66,8 @@ std::optional<std::string> OllamaClient::Generate(const std::string& prompt,
 }
 
 bool OllamaClient::IsModelAvailable() const {
-    httplib::Client cli(config_.host, config_.port);
+    std::string url = GetClientUrl(config_.host, config_.port);
+    httplib::Client cli(url);
     cli.set_connection_timeout(5, 0);
     auto res = cli.Get("/api/tags");
     if (!res || res->status != 200) {
@@ -72,29 +87,11 @@ bool OllamaClient::IsModelAvailable() const {
 }
 
 bool OllamaClient::IsServerReachable() const {
-    httplib::Client cli(config_.host, config_.port);
+    std::string url = GetClientUrl(config_.host, config_.port);
+    httplib::Client cli(url);
     cli.set_connection_timeout(2, 0);
     auto res = cli.Get("/api/tags");
     return res && res->status == 200;
 }
 
-std::vector<std::string> OllamaClient::ListModels() const {
-    httplib::Client cli(config_.host, config_.port);
-    cli.set_connection_timeout(5, 0);
-    auto res = cli.Get("/api/tags");
-    std::vector<std::string> names;
-    if (!res || res->status != 200) {
-        return names;
-    }
-    try {
-        json parsed = json::parse(res->body);
-        for (const auto& m : parsed.value("models", json::array())) {
-            names.push_back(m.value("name", std::string{}));
-        }
-    } catch (const json::exception& e) {
-        spdlog::error("OllamaClient: failed to parse /api/tags response: {}", e.what());
-    }
-    return names;
-}
-
-}  // namespace cppcoder
+} // namespace cppcoder
