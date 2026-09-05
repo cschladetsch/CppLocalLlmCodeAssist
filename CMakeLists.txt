@@ -61,6 +61,8 @@ FetchContent_Declare(
 set(HTTPLIB_REQUIRE_OPENSSL OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(httplib)
 
+add_compile_options($<$<CXX_COMPILER_ID:Clang>:-Wno-character-conversion>)
+
 find_package(Threads REQUIRED)
 
 option(BUILD_EXAMPLES "Build examples/ (replay_demo, minimal_usage)" ON)
